@@ -171,7 +171,7 @@ def install(
     )
 
     install_mode = InstallMode(manifest.install.mode)
-    fallback = list(manifest.install.fallback)
+    fallback: list[str] = [str(f) for f in manifest.install.fallback]
     source_violation_reported: set[str] = set()
 
     with rollback_on_failure() as record:

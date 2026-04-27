@@ -10,6 +10,7 @@ exposes it.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from skillpod.cli._output import emit, fail
 from skillpod.manifest import load as load_manifest
@@ -71,7 +72,7 @@ def run(
     _render(query, results, json_output=json_output)
 
 
-def _render(query: str, results: list[dict], *, json_output: bool) -> None:
+def _render(query: str, results: list[dict[str, Any]], *, json_output: bool) -> None:
     payload = {"query": query, "results": results}
     if json_output:
         emit(payload, json_output=True)

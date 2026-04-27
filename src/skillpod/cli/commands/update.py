@@ -12,6 +12,7 @@ operation, leaving the project in its previous state.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import typer
 
@@ -62,34 +63,32 @@ def run(
         _restore(lockfile_path, snapshot_resolved)
         raise
 
-    payload = {
-        "ok": True,
-        "updated": [
-            {
-                "name": s.name,
-                "commit": s.resolved.commit,
-                "url": s.resolved.url,
-            }
-            for s in report.installed
-            if skill_name is None or s.name == skill_name
-        ],
-    }
+    updated: list[dict[str, str | None]] = [
+        {
+            "name": s.name,
+            "commit": s.resolved.commit,
+            "url": s.resolved.url,
+        }
+        for s in report.installed
+        if skill_name is None or s.name == skill_name
+    ]
+    payload: dict[str, Any] = {"ok": True, "updated": updated}
     if json_output:
         emit(payload, json_output=True)
         return
 
-    if not payload["updated"]:
+    if not updated:
         emit(payload, json_output=False, human="Nothing to update.")
         return
 
-    lines = [f"Updated {len(payload['updated'])} skill(s):"]
-    for entry in payload["updated"]:
+    lines = [f"Updated {len(updated)} skill(s):"]
+    for entry in updated:
         commit = (entry["commit"] or "")[:12]
         lines.append(f"  {entry['name']:<24} {commit}")
     emit(payload, json_output=False, human="\n".join(lines))
 
 
-def _restore(lockfile_path: Path, resolved: dict) -> None:
+def _restore(lockfile_path: Path, resolved: Any) -> None:
     """Best-effort restore of the lockfile snapshot; ignore errors."""
     try:
         from skillpod.lockfile.models import Lockfile as _Lockfile

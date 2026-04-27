@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from typing import Any
 
 from skillpod.cli._output import emit, fail
 from skillpod.lockfile import io as lockfile_io
@@ -54,7 +55,7 @@ def run(
         emit(payload, json_output=json_output, human="No locked skills.")
         return
 
-    rows: list[dict] = []
+    rows: list[dict[str, Any]] = []
     try:
         for name, locked in lock.resolved.items():
             latest = _latest_commit(locked.url)

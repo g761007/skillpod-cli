@@ -11,7 +11,7 @@ as part of `add-skillpod-trust-and-search` (Roadmap 0.2.0).
 
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Annotated, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -127,7 +127,11 @@ class InstallPolicy(_StrictModel):
 
     mode: Literal["symlink", "copy", "hardlink"] = "symlink"
     on_missing: Literal["error", "skip"] = "error"
-    fallback: list[Literal["copy"]] = Field(default_factory=lambda: ["copy"])
+    fallback: list[Literal["symlink", "copy", "hardlink"]] = Field(
+        default_factory=lambda: cast(
+            "list[Literal['symlink', 'copy', 'hardlink']]", ["copy"]
+        )
+    )
 
 
 class Skillfile(_StrictModel):

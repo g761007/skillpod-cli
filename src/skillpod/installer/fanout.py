@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 import os
 import warnings
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager, suppress
 from pathlib import Path
 
@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 @contextmanager
-def rollback_on_failure() -> Iterable[Callable[[Path], None]]:
+def rollback_on_failure() -> Iterator[Callable[[Path], None]]:
     """Track filesystem actions; undo them all if the block raises."""
     created: list[Path] = []
 

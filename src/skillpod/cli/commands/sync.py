@@ -16,6 +16,7 @@ re-render to a single agent, leaving all other agents untouched.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from skillpod.cli._output import emit, fail, run_with_exit_codes
 from skillpod.installer import (
@@ -59,7 +60,7 @@ def _sync_impl(
     manifest_path: Path,
     *,
     agent_filter: str | None = None,
-) -> dict:
+) -> dict[str, Any]:
     manifest = load_manifest(manifest_path)
     all_agent_names = [a.name for a in manifest.agents]
 

@@ -27,7 +27,8 @@ def _modes_supported(adapter: object) -> str:
     """
     prop = getattr(adapter, "modes_supported", None)
     if callable(prop):
-        return prop()
+        result = prop()
+        return str(result)
     if isinstance(prop, str):
         return prop
     return "symlink, copy, hardlink"
@@ -39,14 +40,14 @@ def _adapter_dotted_path(adapter: object) -> str:
     return f"{cls.__module__}.{cls.__qualname__}"
 
 
-def _list_impl(project_root: Path, manifest_path: Path) -> list[dict]:
+def _list_impl(project_root: Path, manifest_path: Path) -> list[dict[str, str]]:
     manifest = load_manifest(manifest_path)
 
     # Re-register adapters so import errors surface here too.
     reset_registry()
     _register_manifest_adapters(manifest.agents)
 
-    rows: list[dict] = []
+    rows: list[dict[str, str]] = []
     for entry in manifest.agents:
         adapter = get_adapter(entry.name)
         rows.append(
