@@ -1,0 +1,35 @@
+schema: spec-driven
+
+context: |
+  Project: skillpod-cli — a project-scoped, reproducible skill dependency
+  manager for AI coding agents (Claude Code / Codex / Gemini / Cursor /
+  OpenCode / Antigravity). NOT a global skill installer.
+
+  Core flow: discover -> resolve -> lock -> install -> fan-out symlinks.
+  - skills.sh acts as a *discovery layer only*; the source of truth is the
+    git commit recorded in skillfile.lock.
+  - Project install root: .skillpod/skills/ (and .skillpod/user_skills/).
+  - Agent fan-out targets: .claude/skills, .codex/skills, .gemini/skills,
+    .cursor/skills, .opencode/skills, .antigravity/skills.
+  - Global cache: ~/.cache/skillpod/<host>/<org>/<repo>@<ref>/ (immutable).
+
+  Tech stack: Python 3.11+, Typer (CLI), pydantic v2 (schema), httpx (HTTP),
+  PyYAML (manifest/lockfile), git via subprocess. Tests with pytest.
+  Source layout mirrors capabilities: src/skillpod/{manifest,lockfile,
+  sources,registry,installer,cli}/.
+
+  Conventions:
+  - Conventional commits.
+  - Capability names are stable; later changes use MODIFIED/REMOVED rather
+    than introducing new capabilities.
+  - Every requirement uses "The system SHALL ..." and ships with at least
+    one `#### Scenario:` block.
+
+rules:
+  proposal:
+    - Use ## Why / ## What Changes / ## Impact, with ## Non-goals when scope
+      bleed is plausible.
+    - Reference plan sections in plans/skillpod-plan.md when motivating Why.
+  tasks:
+    - Each task should be completable in ~1-2 hours.
+    - Group tasks by capability; cross-capability glue goes last.

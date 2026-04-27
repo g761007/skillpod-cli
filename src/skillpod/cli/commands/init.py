@@ -1,0 +1,59 @@
+"""`skillpod init` — bootstrap a project with a minimal skillfile.yml."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from skillpod.cli._output import emit, fail
+
+_DEFAULT_MANIFEST = (
+    "version: 1\n"
+    "\n"
+    "agents:\n"
+    "  - claude\n"
+    "\n"
+    "skills: []\n"
+)
+
+
+def _ensure_gitignore_entry(project_root: Path) -> bool:
+    """Append `.skillpod/` to `.gitignore` if missing. Return True if changed."""
+    gi = project_root / ".gitignore"
+    needle = ".skillpod/"
+    if gi.exists():
+        text = gi.read_text(encoding="utf-8")
+        for line in text.splitlines():
+            if line.strip() == needle:
+                return False
+        suffix = "" if text.endswith("\n") or not text else "\n"
+        gi.write_text(text + suffix + needle + "\n", encoding="utf-8")
+        return True
+    gi.write_text(needle + "\n", encoding="utf-8")
+    return True
+
+
+def run(*, project_root: Path, manifest_path: Path, json_output: bool) -> None:
+    if manifest_path.exists():
+        raise fail(
+            f"{manifest_path} already exists; refuse to overwrite",
+            code=1,
+            json_output=json_output,
+        )
+
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(_DEFAULT_MANIFEST, encoding="utf-8")
+    gitignore_changed = _ensure_gitignore_entry(project_root)
+
+    payload = {
+        "ok": True,
+        "manifest": str(manifest_path),
+        "gitignore_updated": gitignore_changed,
+    }
+    human = (
+        f"Wrote {manifest_path}\n"
+        + ("Appended `.skillpod/` to .gitignore" if gitignore_changed else "")
+    ).strip()
+    emit(payload, json_output=json_output, human=human)
+
+
+__all__ = ["run"]

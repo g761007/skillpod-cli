@@ -1,0 +1,17 @@
+.claude/
+.codex/
+.omc/
+
+# skillpod project install root (managed by `skillpod install`)
+.skillpod/
+
+# Python build / cache
+__pycache__/
+*.py[cod]
+.venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
+*.egg-info/

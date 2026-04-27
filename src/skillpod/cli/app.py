@@ -1,0 +1,209 @@
+"""Typer entry point — wires subcommands from `skillpod.cli.commands`."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Annotated
+
+import typer
+
+from skillpod.cli.commands import (
+    add as add_cmd,
+)
+from skillpod.cli.commands import (
+    doctor as doctor_cmd,
+)
+from skillpod.cli.commands import (
+    init as init_cmd,
+)
+from skillpod.cli.commands import (
+    install_cmd,
+    list_cmd,
+)
+from skillpod.cli.commands import (
+    outdated as outdated_cmd,
+)
+from skillpod.cli.commands import (
+    remove as remove_cmd,
+)
+from skillpod.cli.commands import (
+    search as search_cmd,
+)
+from skillpod.cli.commands import (
+    sync as sync_cmd,
+)
+from skillpod.cli.commands import (
+    update as update_cmd,
+)
+
+app = typer.Typer(
+    name="skillpod",
+    help="Project-scoped, reproducible skill dependency manager.",
+    no_args_is_help=True,
+    add_completion=False,
+)
+
+ManifestOpt = Annotated[
+    Path,
+    typer.Option(
+        "--manifest",
+        "-m",
+        help="Path to skillfile.yml (default: ./skillfile.yml).",
+        show_default=True,
+    ),
+]
+JsonOpt = Annotated[
+    bool,
+    typer.Option("--json", help="Emit machine-readable JSON instead of text."),
+]
+
+
+def _project_root(manifest: Path) -> Path:
+    """The project root is the directory containing the manifest."""
+    p = manifest.expanduser().resolve()
+    return p.parent if p.parent.exists() else Path.cwd()
+
+
+@app.command(help="Bootstrap a new skillfile.yml in the current directory.")
+def init(
+    manifest: ManifestOpt = Path("skillfile.yml"),
+    json: JsonOpt = False,
+) -> None:
+    project_root = Path.cwd()
+    manifest_path = (project_root / manifest).resolve() if not manifest.is_absolute() else manifest
+    init_cmd.run(
+        project_root=project_root,
+        manifest_path=manifest_path,
+        json_output=json,
+    )
+
+
+@app.command(help="Install every skill declared in skillfile.yml.")
+def install(
+    manifest: ManifestOpt = Path("skillfile.yml"),
+    json: JsonOpt = False,
+) -> None:
+    manifest_path = manifest if manifest.is_absolute() else (Path.cwd() / manifest).resolve()
+    install_cmd.run(
+        project_root=_project_root(manifest_path),
+        manifest_path=manifest_path,
+        json_output=json,
+    )
+
+
+@app.command(help="Add a skill to skillfile.yml and install it.")
+def add(
+    skill: Annotated[str, typer.Argument(help="Skill name to add.")],
+    manifest: ManifestOpt = Path("skillfile.yml"),
+    json: JsonOpt = False,
+) -> None:
+    manifest_path = manifest if manifest.is_absolute() else (Path.cwd() / manifest).resolve()
+    add_cmd.run(
+        project_root=_project_root(manifest_path),
+        manifest_path=manifest_path,
+        skill_name=skill,
+        json_output=json,
+    )
+
+
+@app.command(help="Remove a skill from skillfile.yml and uninstall it.")
+def remove(
+    skill: Annotated[str, typer.Argument(help="Skill name to remove.")],
+    manifest: ManifestOpt = Path("skillfile.yml"),
+    json: JsonOpt = False,
+) -> None:
+    manifest_path = manifest if manifest.is_absolute() else (Path.cwd() / manifest).resolve()
+    remove_cmd.run(
+        project_root=_project_root(manifest_path),
+        manifest_path=manifest_path,
+        skill_name=skill,
+        json_output=json,
+    )
+
+
+@app.command("list", help="List installed skills and their resolved sources.")
+def list_(
+    manifest: ManifestOpt = Path("skillfile.yml"),
+    json: JsonOpt = False,
+) -> None:
+    manifest_path = manifest if manifest.is_absolute() else (Path.cwd() / manifest).resolve()
+    list_cmd.run(
+        project_root=_project_root(manifest_path),
+        manifest_path=manifest_path,
+        json_output=json,
+    )
+
+
+@app.command(help="Re-create symlinks from skillfile.lock without re-resolving.")
+def sync(
+    manifest: ManifestOpt = Path("skillfile.yml"),
+    json: JsonOpt = False,
+) -> None:
+    manifest_path = manifest if manifest.is_absolute() else (Path.cwd() / manifest).resolve()
+    sync_cmd.run(
+        project_root=_project_root(manifest_path),
+        manifest_path=manifest_path,
+        json_output=json,
+    )
+
+
+@app.command("search", help="Search the registry for skills matching a query.")
+def search(
+    query: Annotated[str, typer.Argument(help="Skill name or query term.")],
+    limit: Annotated[int, typer.Option("--limit", "-n", help="Maximum rows to display.")] = 20,
+    manifest: ManifestOpt = Path("skillfile.yml"),
+    json: JsonOpt = False,
+) -> None:
+    manifest_path = manifest if manifest.is_absolute() else (Path.cwd() / manifest).resolve()
+    search_cmd.run(
+        project_root=_project_root(manifest_path),
+        manifest_path=manifest_path,
+        query=query,
+        limit=limit,
+        json_output=json,
+    )
+
+
+@app.command("outdated", help="Show which locked skills have drifted from upstream.")
+def outdated(
+    manifest: ManifestOpt = Path("skillfile.yml"),
+    json: JsonOpt = False,
+) -> None:
+    manifest_path = manifest if manifest.is_absolute() else (Path.cwd() / manifest).resolve()
+    outdated_cmd.run(
+        project_root=_project_root(manifest_path),
+        manifest_path=manifest_path,
+        json_output=json,
+    )
+
+
+@app.command("update", help="Re-resolve and refresh skills in the lockfile.")
+def update(
+    skill: Annotated[str | None, typer.Argument(help="Skill name to update (omit for all).")] = None,
+    manifest: ManifestOpt = Path("skillfile.yml"),
+    json: JsonOpt = False,
+) -> None:
+    manifest_path = manifest if manifest.is_absolute() else (Path.cwd() / manifest).resolve()
+    update_cmd.run(
+        project_root=_project_root(manifest_path),
+        manifest_path=manifest_path,
+        skill_name=skill,
+        json_output=json,
+    )
+
+
+@app.command("doctor", help="Verify manifest/lockfile/symlink consistency.")
+def doctor(
+    manifest: ManifestOpt = Path("skillfile.yml"),
+    json: JsonOpt = False,
+) -> None:
+    manifest_path = manifest if manifest.is_absolute() else (Path.cwd() / manifest).resolve()
+    doctor_cmd.run(
+        project_root=_project_root(manifest_path),
+        manifest_path=manifest_path,
+        json_output=json,
+    )
+
+
+if __name__ == "__main__":  # pragma: no cover
+    app()

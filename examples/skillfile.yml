@@ -1,0 +1,36 @@
+# Example skillfile.yml — mirrors plans/skillpod-plan.md §3.1.
+# This file is illustrative; real projects typically pin only the agents
+# and skills they actually use.
+
+version: 1
+
+registry:
+  default: skills.sh
+
+agents:
+  - claude
+  - codex
+  - gemini
+
+install:
+  mode: symlink         # 0.1.0 only supports symlink mode
+  on_missing: error     # abort instead of silently skipping unresolved skills
+
+sources:
+  - name: local
+    type: local
+    path: ~/.agents/skills
+    priority: 100
+
+  - name: anthropic
+    type: git
+    url: https://github.com/anthropics/skills
+    ref: main
+    priority: 80
+
+skills:
+  - audit                       # shorthand: resolved against priority order
+  - polish
+
+  - name: custom-skill          # full form: pinned to one explicit source
+    source: anthropic
