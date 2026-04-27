@@ -882,3 +882,123 @@ def test_global_doctor_flags_broken_symlink(
     assert result.exit_code == 1
     payload = json.loads(result.stdout)
     assert any(f["code"] == "broken-global-symlink" for f in payload["findings"])
+
+
+# ---- adapter list -----------------------------------------------------------
+
+
+def test_adapter_list_json_shape_default_identity(
+    runner: CliRunner, tmp_path: Path
+) -> None:
+    """Scenario: Default registry shown — every agent shows IdentityAdapter."""
+    proj = _project(
+        tmp_path,
+        "version: 1\nagents: [claude, codex, gemini]\nskills: []\n",
+    )
+    result = runner.invoke(
+        app, ["adapter", "list", "--json", "--manifest", str(proj / "skillfile.yml")]
+    )
+    assert result.exit_code == 0, result.stdout + (result.stderr or "")
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is True
+    adapters = payload["adapters"]
+    assert len(adapters) == 3
+    agent_names = [r["agent"] for r in adapters]
+    assert agent_names == ["claude", "codex", "gemini"]
+    for row in adapters:
+        assert "IdentityAdapter" in row["adapter"]
+        assert row["mode-supported"] == "symlink, copy, hardlink"
+
+
+def test_adapter_list_exit_1_on_bad_adapter_path(
+    runner: CliRunner, tmp_path: Path
+) -> None:
+    """Scenario: Custom adapter dotted path fails to import — exit 1."""
+    proj = _project(
+        tmp_path,
+        "version: 1\nagents:\n  - name: claude\n    adapter: nonexistent.module.Adapter\nskills: []\n",
+    )
+    result = runner.invoke(
+        app, ["adapter", "list", "--json", "--manifest", str(proj / "skillfile.yml")]
+    )
+    assert result.exit_code == 1
+
+
+def test_adapter_list_human_output_has_header(
+    runner: CliRunner, tmp_path: Path
+) -> None:
+    """Human-readable adapter list includes AGENT/ADAPTER/MODE-SUPPORTED header."""
+    proj = _project(
+        tmp_path,
+        "version: 1\nagents: [claude]\nskills: []\n",
+    )
+    result = runner.invoke(
+        app, ["adapter", "list", "--manifest", str(proj / "skillfile.yml")]
+    )
+    assert result.exit_code == 0, result.stdout
+    assert "AGENT" in result.stdout
+    assert "ADAPTER" in result.stdout
+    assert "MODE-SUPPORTED" in result.stdout
+
+
+# ---- sync --agent -----------------------------------------------------------
+
+
+def test_sync_agent_flag_only_renders_target_agent(
+    runner: CliRunner, tmp_path: Path
+) -> None:
+    """Scenario: Single-agent re-render — only .claude/skills/ is touched."""
+    skills_root = tmp_path / "pool"
+    (skills_root / "audit").mkdir(parents=True)
+    (skills_root / "audit" / "manifest.md").write_text("# audit", encoding="utf-8")
+
+    proj = _project(
+        tmp_path,
+        textwrap.dedent(f"""
+            version: 1
+            agents: [claude, codex]
+            sources:
+              - name: local
+                type: local
+                path: {skills_root}
+            skills: [audit]
+        """),
+    )
+
+    # Full install first so both agents have fan-out.
+    result = runner.invoke(
+        app, ["install", "--manifest", str(proj / "skillfile.yml")]
+    )
+    assert result.exit_code == 0, result.stdout
+
+    assert (proj / ".claude" / "skills" / "audit").exists()
+    assert (proj / ".codex" / "skills" / "audit").exists()
+
+    # Remove claude's fan-out manually; sync --agent claude should re-create it.
+    (proj / ".claude" / "skills" / "audit").unlink()
+
+    result = runner.invoke(
+        app,
+        ["sync", "--agent", "claude", "--manifest", str(proj / "skillfile.yml")],
+    )
+    assert result.exit_code == 0, result.stdout
+
+    # claude's fan-out is restored.
+    assert (proj / ".claude" / "skills" / "audit").exists()
+    # codex is untouched (still present from install).
+    assert (proj / ".codex" / "skills" / "audit").exists()
+
+
+def test_sync_unknown_agent_exits_1(
+    runner: CliRunner, tmp_path: Path
+) -> None:
+    """Scenario: Unknown agent rejected — exit 1, no fan-out touched."""
+    proj = _project(
+        tmp_path,
+        "version: 1\nagents: [claude]\nskills: []\n",
+    )
+    result = runner.invoke(
+        app,
+        ["sync", "--agent", "foobar", "--manifest", str(proj / "skillfile.yml")],
+    )
+    assert result.exit_code == 1

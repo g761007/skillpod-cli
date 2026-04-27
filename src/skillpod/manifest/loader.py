@@ -56,6 +56,30 @@ def _normalise_groups(raw: Any) -> dict[str, list[dict[str, Any]]]:
     return out
 
 
+def _normalise_agents(raw: Any) -> list[dict[str, Any]]:
+    """Normalise the ``agents:`` list to object form.
+
+    Accepts:
+    - ``"claude"``                          → ``{"name": "claude"}``
+    - ``{"name": "claude", "adapter": …}``  → kept as-is
+    """
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        raise ManifestError(f"`agents:` must be a list, got {type(raw).__name__}")
+    out: list[dict[str, Any]] = []
+    for idx, item in enumerate(raw):
+        if isinstance(item, str):
+            out.append({"name": item})
+        elif isinstance(item, dict):
+            out.append(item)
+        else:
+            raise ManifestError(
+                f"`agents[{idx}]`: expected string or mapping, got {type(item).__name__}"
+            )
+    return out
+
+
 def loads(text: str) -> Skillfile:
     """Parse manifest YAML text into a `Skillfile`."""
     try:
@@ -74,6 +98,8 @@ def loads(text: str) -> Skillfile:
         data["skills"] = _normalise_skills(data["skills"])
     if "groups" in data:
         data["groups"] = _normalise_groups(data["groups"])
+    if "agents" in data:
+        data["agents"] = _normalise_agents(data["agents"])
 
     try:
         return Skillfile.model_validate(data)

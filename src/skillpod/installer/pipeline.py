@@ -6,7 +6,7 @@ Pipeline ordering (per `installer/spec.md`):
         -> resolve sources (with registry fallback)
         -> fetch into cache
         -> materialise .skillpod/skills/<name>
-        -> fan out symlinks to enabled agents
+        -> fan out via adapter (symlink/copy/hardlink) to enabled agents
         -> integrity check against lockfile (if any)
         -> write skillfile.lock
 
@@ -16,12 +16,17 @@ current run.
 
 from __future__ import annotations
 
+import importlib
+import logging
 import shutil
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from skillpod.installer.adapter import InstallMode
+from skillpod.installer.adapter_registry import get_adapter, register_adapter, reset_registry
 from skillpod.installer.errors import (
+    AdapterImportError,
     FrozenDriftError,
     InstallError,
     InstallSystemError,
@@ -30,7 +35,7 @@ from skillpod.installer.errors import (
 from skillpod.installer.expand import flatten
 from skillpod.installer.fanout import (
     create_install_root_symlink,
-    create_managed_fanout_symlink,
+    materialise_fanout,
     rollback_on_failure,
 )
 from skillpod.installer.paths import agent_skill_dir, project_skill_dir
@@ -40,10 +45,12 @@ from skillpod.lockfile import io as lockfile_io
 from skillpod.lockfile.integrity import hash_directory
 from skillpod.lockfile.models import LockedSkill, Lockfile
 from skillpod.manifest import load as load_manifest
-from skillpod.manifest.models import SkillEntry
+from skillpod.manifest.models import AgentEntry, SkillEntry
 from skillpod.registry import RegistryError, TrustError
 from skillpod.sources.errors import GitOperationError, SourceError
 from skillpod.sources.types import ResolvedSkill
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -105,6 +112,11 @@ def install(
     except Exception as exc:
         raise InstallUserError(str(exc)) from exc
 
+    # Phase 0 — register custom adapters BEFORE any filesystem mutation.
+    # An import failure aborts the run immediately with a clear error.
+    reset_registry()
+    _register_manifest_adapters(manifest.agents)
+
     existing_lock = lockfile_io.read(lockfile_path)
     flat_skills = flatten(manifest)
     user_skills = discover_user_skills(project_root)
@@ -155,8 +167,12 @@ def install(
         project_root=project_root,
         manifest_path=manifest_path,
         lockfile_path=lockfile_path,
-        fanned_out_to=list(manifest.agents),
+        fanned_out_to=[a.name for a in manifest.agents],
     )
+
+    install_mode = InstallMode(manifest.install.mode)
+    fallback = list(manifest.install.fallback)
+    source_violation_reported: set[str] = set()
 
     with rollback_on_failure() as record:
         for resolved, locked_entry in plan:
@@ -172,11 +188,29 @@ def install(
                         f"{sha256} does not match lockfile {locked_entry.sha256}"
                     )
 
-            for agent in manifest.agents:
-                fanout_link = agent_skill_dir(project_root, agent, resolved.name)
-                create_managed_fanout_symlink(
-                    fanout_link, skill_link, project_root, record=record
+            # Snapshot source_dir mtimes for mutation detection.
+            source_snapshot = _snapshot_source(skill_link)
+
+            for agent_entry in manifest.agents:
+                adapter = get_adapter(agent_entry.name)
+                target_dir = agent_skill_dir(project_root, agent_entry.name, resolved.name)
+                materialise_fanout(
+                    skill_name=resolved.name,
+                    source_dir=skill_link,
+                    target_dir=target_dir,
+                    agent=agent_entry.name,
+                    project_root=project_root,
+                    mode=install_mode,
+                    fallback=fallback,
+                    adapter=adapter,
+                    record=record,
                 )
+
+            # Detect any adapter that wrote into source_dir.
+            violation_key = resolved.name
+            if violation_key not in source_violation_reported:
+                _check_source_mutation(skill_link, source_snapshot, violation_key)
+                source_violation_reported.add(violation_key)
 
             report.installed.append(
                 InstalledSkill(
@@ -226,10 +260,105 @@ def uninstall(
         else:
             shutil.rmtree(skill_link)
 
-    for agent in manifest.agents:
-        link = agent_skill_dir(project_root, agent, skill_name)
+    for agent_entry in manifest.agents:
+        link = agent_skill_dir(project_root, agent_entry.name, skill_name)
         if link.is_symlink():
             link.unlink()
+
+
+def _register_manifest_adapters(agents: list[AgentEntry]) -> None:
+    """Import and register custom adapters declared in the manifest.
+
+    Called before any filesystem mutation.  An import or attribute lookup
+    failure raises ``AdapterImportError`` immediately.
+    """
+    for entry in agents:
+        if entry.adapter is None:
+            continue
+        dotted = entry.adapter
+        # Support both "module.ClassName" and "module:ClassName" separators.
+        if ":" in dotted:
+            module_path, attr = dotted.rsplit(":", 1)
+        else:
+            module_path, _, attr = dotted.rpartition(".")
+        if not module_path:
+            raise AdapterImportError(
+                f"invalid adapter path {dotted!r} for agent {entry.name!r}: "
+                f"must be a dotted module path ending with a class name"
+            )
+        try:
+            mod = importlib.import_module(module_path)
+        except ImportError as exc:
+            raise AdapterImportError(
+                f"could not import adapter module {module_path!r} "
+                f"for agent {entry.name!r}: {exc}"
+            ) from exc
+        try:
+            cls = getattr(mod, attr)
+        except AttributeError as exc:
+            raise AdapterImportError(
+                f"adapter module {module_path!r} has no attribute {attr!r} "
+                f"for agent {entry.name!r}"
+            ) from exc
+        try:
+            instance = cls()
+        except Exception as exc:
+            raise AdapterImportError(
+                f"could not instantiate adapter {dotted!r} "
+                f"for agent {entry.name!r}: {exc}"
+            ) from exc
+        register_adapter(entry.name, instance)
+        logger.debug("registered adapter %s for agent %s", dotted, entry.name)
+
+
+def _snapshot_source(source_dir: Path) -> dict[Path, tuple[float, int]]:
+    """Return a mapping of ``{path: (mtime, size)}`` for all files under source_dir."""
+    snapshot: dict[Path, tuple[float, int]] = {}
+    if not source_dir.exists():
+        return snapshot
+    for item in source_dir.rglob("*"):
+        if item.is_file() and not item.is_symlink():
+            try:
+                st = item.stat()
+                snapshot[item] = (st.st_mtime, st.st_size)
+            except OSError:
+                pass
+    return snapshot
+
+
+def _check_source_mutation(
+    source_dir: Path,
+    snapshot: dict[Path, tuple[float, int]],
+    skill_name: str,
+) -> None:
+    """Emit an error-severity warning if any file in source_dir changed.
+
+    A misbehaving adapter that writes into source_dir violates the adapter
+    contract.  We detect this post-fan-out and report it so the user can
+    fix their adapter.  The run still raises SystemExit(1) via the warning.
+    """
+    violations: list[str] = []
+    if not source_dir.exists():
+        return
+    for item in source_dir.rglob("*"):
+        if item.is_file() and not item.is_symlink():
+            try:
+                st = item.stat()
+                before = snapshot.get(item)
+                if before is None or (st.st_mtime, st.st_size) != before:
+                    violations.append(str(item))
+            except OSError:
+                pass
+    if violations:
+        msg = (
+            f"[ERROR] adapter-source-mutation: a custom adapter wrote into "
+            f"source_dir for skill '{skill_name}': "
+            + ", ".join(violations)
+        )
+        warnings.warn(msg, UserWarning, stacklevel=3)
+        raise InstallSystemError(
+            f"adapter contract violation: source_dir was mutated for skill '{skill_name}'"
+        )
 
 
 __all__ = [

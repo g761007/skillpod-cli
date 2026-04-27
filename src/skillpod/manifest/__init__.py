@@ -3,6 +3,7 @@
 from skillpod.manifest.loader import ManifestError, load, loads
 from skillpod.manifest.models import (
     SUPPORTED_AGENTS,
+    AgentEntry,
     InstallPolicy,
     RegistryConfig,
     RegistrySkillsShPolicy,
@@ -14,6 +15,7 @@ from skillpod.manifest.models import (
 
 __all__ = [
     "SUPPORTED_AGENTS",
+    "AgentEntry",
     "InstallPolicy",
     "ManifestError",
     "RegistryConfig",

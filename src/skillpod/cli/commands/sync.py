@@ -1,4 +1,4 @@
-"""`skillpod sync` — re-create symlinks from the lockfile.
+"""`skillpod sync` — re-create fan-out entries from the lockfile.
 
 Sync is the offline counterpart to `install`:
 - It does not consult the registry.
@@ -8,6 +8,9 @@ Sync is the offline counterpart to `install`:
 For local-sourced skills (which have no lockfile entry) sync still has
 to consult the manifest's source list, but it only walks declared
 sources — never the registry.
+
+The optional ``--agent <id>`` flag restricts fan-out cleanup and
+re-render to a single agent, leaving all other agents untouched.
 """
 
 from __future__ import annotations
@@ -20,6 +23,7 @@ from skillpod.installer import (
     create_managed_fanout_symlink,
     project_skill_dir,
 )
+from skillpod.installer.errors import InstallUserError
 from skillpod.installer.expand import flatten
 from skillpod.installer.fanout import rollback_on_failure
 from skillpod.installer.paths import agent_skill_dir
@@ -50,8 +54,27 @@ def _project_path_from_local(project_root: Path, skill_name: str, manifest_sourc
     )
 
 
-def _sync_impl(project_root: Path, manifest_path: Path) -> dict:
+def _sync_impl(
+    project_root: Path,
+    manifest_path: Path,
+    *,
+    agent_filter: str | None = None,
+) -> dict:
     manifest = load_manifest(manifest_path)
+    all_agent_names = [a.name for a in manifest.agents]
+
+    # Validate --agent flag before touching the filesystem.
+    if agent_filter is not None and agent_filter not in all_agent_names:
+        raise InstallUserError(
+            f"unknown agent {agent_filter!r}; manifest declares: "
+            + (", ".join(repr(a) for a in all_agent_names) or "(none)")
+        )
+
+    # Agents to re-render (may be a single one when --agent is supplied).
+    active_agents = (
+        [agent_filter] if agent_filter is not None else all_agent_names
+    )
+
     lock = lockfile_io.read(project_root / "skillfile.lock")
     user_skills = discover_user_skills(project_root)
     skills = flatten(manifest)
@@ -76,24 +99,30 @@ def _sync_impl(project_root: Path, manifest_path: Path) -> dict:
             skill_link = project_skill_dir(project_root, skill.name)
             create_install_root_symlink(skill_link, target, record=record)
 
-            for agent in manifest.agents:
-                fanout = agent_skill_dir(project_root, agent, skill.name)
+            for agent_name in active_agents:
+                fanout = agent_skill_dir(project_root, agent_name, skill.name)
                 create_managed_fanout_symlink(fanout, skill_link, project_root, record=record)
             rebuilt.append(skill.name)
 
     return {
         "ok": True,
         "synced": rebuilt,
-        "agents": list(manifest.agents),
+        "agents": active_agents,
     }
 
 
-def run(*, project_root: Path, manifest_path: Path, json_output: bool) -> None:
+def run(
+    *,
+    project_root: Path,
+    manifest_path: Path,
+    json_output: bool,
+    agent: str | None = None,
+) -> None:
     if not manifest_path.exists():
         raise fail(f"{manifest_path} not found", code=1, json_output=json_output)
 
     payload = run_with_exit_codes(
-        lambda: _sync_impl(project_root, manifest_path),
+        lambda: _sync_impl(project_root, manifest_path, agent_filter=agent),
         json_output=json_output,
     )
     human = (

@@ -114,7 +114,8 @@ def run(
 
     # Check 3: every declared agent fan-out symlink resolves into .skillpod/skills/.
     for skill in skills:
-        for agent in manifest.agents:
+        for agent_entry in manifest.agents:
+            agent = agent_entry.name
             link = agent_skill_dir(project_root, agent, skill.name)
             if not link.exists() and not link.is_symlink():
                 findings.append(

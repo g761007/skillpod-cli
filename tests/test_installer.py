@@ -7,7 +7,9 @@ Scenarios trace to
 
 from __future__ import annotations
 
+import os
 import textwrap
+import warnings
 from pathlib import Path
 
 import httpx
@@ -16,12 +18,17 @@ import respx
 
 from skillpod import lockfile as lockfile_pkg
 from skillpod.installer import (
+    AdapterImportError,
     InstallConflict,
     InstallSystemError,
     InstallUserError,
     install,
+    reset_registry,
     uninstall,
 )
+from skillpod.installer.adapter import InstallMode
+from skillpod.installer.adapter_default import IdentityAdapter
+from skillpod.installer.adapter_registry import register_adapter
 from skillpod.lockfile.integrity import hash_directory
 from tests._git_fixtures import make_skill_repo
 
@@ -609,3 +616,321 @@ def test_trust_error_on_unverified_skill_is_user_error_code_1(tmp_path: Path) ->
     # Project unchanged.
     assert not (proj / ".skillpod").exists()
     assert not (proj / ".claude").exists()
+
+
+# ---- Adapter layer: copy / hardlink / fallback / custom ---------------------
+
+
+@pytest.fixture(autouse=True)
+def _reset_adapter_registry() -> None:
+    """Restore the default adapter registry after each test."""
+    reset_registry()
+    yield  # type: ignore[misc]
+    reset_registry()
+
+
+def test_copy_mode_produces_independent_files(tmp_path: Path) -> None:
+    """Scenario: Three-agent fan-out under copy mode — independent trees."""
+    skills_root = tmp_path / "pool"
+    (skills_root / "audit").mkdir(parents=True)
+    (skills_root / "audit" / "manifest.md").write_text("original", encoding="utf-8")
+
+    proj = _project(
+        tmp_path,
+        textwrap.dedent(f"""
+            version: 1
+            agents: [claude]
+            install:
+              mode: copy
+            sources:
+              - name: local
+                type: local
+                path: {skills_root}
+            skills: [audit]
+        """),
+    )
+
+    install(proj)
+
+    fanout = proj / ".claude" / "skills" / "audit"
+    assert fanout.is_dir()
+    assert not fanout.is_symlink()
+
+    # Modifying the copy must NOT affect the source.
+    copied_file = fanout / "manifest.md"
+    assert copied_file.read_text(encoding="utf-8") == "original"
+    copied_file.write_text("modified", encoding="utf-8")
+    assert (skills_root / "audit" / "manifest.md").read_text(encoding="utf-8") == "original"
+
+
+def test_hardlink_mode_shares_inodes(tmp_path: Path) -> None:
+    """Scenario: Hardlink fan-out preserves inodes (same-FS only)."""
+    skills_root = tmp_path / "pool"
+    (skills_root / "audit").mkdir(parents=True)
+    (skills_root / "audit" / "manifest.md").write_text("# audit", encoding="utf-8")
+
+    proj = _project(
+        tmp_path,
+        textwrap.dedent(f"""
+            version: 1
+            agents: [claude]
+            install:
+              mode: hardlink
+            sources:
+              - name: local
+                type: local
+                path: {skills_root}
+            skills: [audit]
+        """),
+    )
+
+    # Skip if source and cache are on different devices (CI).
+    src_dev = os.stat(skills_root).st_dev
+    dst_dev = os.stat(tmp_path).st_dev
+    if src_dev != dst_dev:
+        pytest.skip("source and target on different devices — hardlink not possible")
+
+    install(proj)
+
+    fanout_file = proj / ".claude" / "skills" / "audit" / "manifest.md"
+    # The fanout file is hardlinked from .skillpod/skills/audit/manifest.md.
+    skillpod_file = proj / ".skillpod" / "skills" / "audit" / "manifest.md"
+    assert fanout_file.exists()
+    assert os.stat(fanout_file).st_ino == os.stat(skillpod_file).st_ino
+
+
+def test_symlink_failure_falls_back_to_copy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Scenario: Symlink failure auto-degrades to copy."""
+    skills_root = tmp_path / "pool"
+    (skills_root / "audit").mkdir(parents=True)
+    (skills_root / "audit" / "manifest.md").write_text("# audit", encoding="utf-8")
+
+    proj = _project(
+        tmp_path,
+        textwrap.dedent(f"""
+            version: 1
+            agents: [claude]
+            install:
+              mode: symlink
+              fallback: [copy]
+            sources:
+              - name: local
+                type: local
+                path: {skills_root}
+            skills: [audit]
+        """),
+    )
+
+    # Patch IdentityAdapter.adapt to raise OSError for SYMLINK.
+    original_adapt = IdentityAdapter.adapt
+
+    def patched_adapt(self, *, skill_name, source_dir, target_dir, mode):
+        if mode is InstallMode.SYMLINK:
+            raise OSError("symlink not permitted (simulated)")
+        return original_adapt(self, skill_name=skill_name, source_dir=source_dir,
+                              target_dir=target_dir, mode=mode)
+
+    monkeypatch.setattr(IdentityAdapter, "adapt", patched_adapt)
+
+    with pytest.warns(UserWarning, match="fell back to mode='copy'"):
+        install(proj)
+
+    fanout = proj / ".claude" / "skills" / "audit"
+    assert fanout.is_dir()
+    assert not fanout.is_symlink()
+
+
+def test_empty_fallback_raises_when_symlink_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Symlink failure with fallback=[] raises InstallSystemError."""
+    skills_root = tmp_path / "pool"
+    (skills_root / "audit").mkdir(parents=True)
+
+    proj = _project(
+        tmp_path,
+        textwrap.dedent(f"""
+            version: 1
+            agents: [claude]
+            install:
+              mode: symlink
+              fallback: []
+            sources:
+              - name: local
+                type: local
+                path: {skills_root}
+            skills: [audit]
+        """),
+    )
+
+    original_adapt = IdentityAdapter.adapt
+
+    def fail_symlink(self, *, skill_name, source_dir, target_dir, mode):
+        if mode is InstallMode.SYMLINK:
+            raise OSError("symlink not permitted (simulated)")
+        return original_adapt(self, skill_name=skill_name, source_dir=source_dir,
+                              target_dir=target_dir, mode=mode)
+
+    monkeypatch.setattr(IdentityAdapter, "adapt", fail_symlink)
+
+    with pytest.raises(InstallSystemError, match="symlink failed"):
+        install(proj)
+
+
+def test_cross_device_hardlink_degrades_to_copy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Scenario: Cross-device hardlink degrades to copy."""
+    skills_root = tmp_path / "pool"
+    (skills_root / "audit").mkdir(parents=True)
+    (skills_root / "audit" / "manifest.md").write_text("# audit", encoding="utf-8")
+
+    proj = _project(
+        tmp_path,
+        textwrap.dedent(f"""
+            version: 1
+            agents: [claude]
+            install:
+              mode: hardlink
+            sources:
+              - name: local
+                type: local
+                path: {skills_root}
+            skills: [audit]
+        """),
+    )
+
+    # Patch _resolve_mode in fanout directly so we don't fight os.stat timing.
+    import skillpod.installer.fanout as _fanout_mod
+    from skillpod.installer.adapter import InstallMode as _IM
+
+    original_resolve = _fanout_mod._resolve_mode
+
+    def fake_resolve(mode, source_dir, target_dir, skill_name, agent):
+        if mode is _IM.HARDLINK:
+            warnings.warn(
+                f"skillpod: source and target are on different filesystems — "
+                f"hardlink mode is not possible for skill={skill_name!r}, "
+                f"agent={agent!r}; falling back to copy",
+                UserWarning,
+                stacklevel=4,
+            )
+            return _IM.COPY
+        return original_resolve(mode, source_dir, target_dir, skill_name, agent)
+
+    monkeypatch.setattr(_fanout_mod, "_resolve_mode", fake_resolve)
+
+    with pytest.warns(UserWarning, match="different filesystems"):
+        install(proj)
+
+    fanout = proj / ".claude" / "skills" / "audit"
+    assert fanout.is_dir()
+    assert not fanout.is_symlink()
+
+
+def test_adapter_import_error_aborts_before_fs_mutation(tmp_path: Path) -> None:
+    """Scenario: Adapter import fails before fan-out — no .skillpod/ created."""
+    skills_root = tmp_path / "pool"
+    (skills_root / "audit").mkdir(parents=True)
+
+    proj = _project(
+        tmp_path,
+        textwrap.dedent(f"""
+            version: 1
+            agents:
+              - name: claude
+                adapter: nonexistent.module.MyAdapter
+            sources:
+              - name: local
+                type: local
+                path: {skills_root}
+            skills: [audit]
+        """),
+    )
+
+    with pytest.raises(AdapterImportError, match=r"nonexistent\.module"):
+        install(proj)
+
+    assert not (proj / ".skillpod").exists()
+    assert not (proj / ".claude").exists()
+
+
+def test_custom_adapter_override_is_invoked(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A registered custom adapter is called instead of IdentityAdapter.
+
+    We monkeypatch ``reset_registry`` so the adapter registered here is not
+    cleared by the pipeline's phase-0 reset, while the manifest has no
+    ``adapter:`` dotted path (so ``_register_manifest_adapters`` is a no-op).
+    """
+    skills_root = tmp_path / "pool"
+    (skills_root / "audit").mkdir(parents=True)
+    (skills_root / "audit" / "manifest.md").write_text("# audit", encoding="utf-8")
+
+    proj = _project(
+        tmp_path,
+        textwrap.dedent(f"""
+            version: 1
+            agents: [claude]
+            sources:
+              - name: local
+                type: local
+                path: {skills_root}
+            skills: [audit]
+        """),
+    )
+
+    calls: list[dict] = []
+
+    class RecordingAdapter:
+        def adapt(self, *, skill_name, source_dir, target_dir, mode):
+            calls.append({"skill_name": skill_name, "mode": str(mode)})
+            # Must still materialise target_dir for install to succeed.
+            target_dir.symlink_to(source_dir)
+
+    # Register before install; suppress the pipeline's reset so it survives.
+    register_adapter("claude", RecordingAdapter())
+    monkeypatch.setattr("skillpod.installer.pipeline.reset_registry", lambda: None)
+
+    install(proj)
+
+    assert len(calls) == 1
+    assert calls[0]["skill_name"] == "audit"
+
+
+def test_misbehaving_adapter_source_mutation_detected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Scenario: Misbehaving adapter writes to source_dir — reported as error."""
+    skills_root = tmp_path / "pool"
+    (skills_root / "audit").mkdir(parents=True)
+    (skills_root / "audit" / "manifest.md").write_text("# audit", encoding="utf-8")
+
+    proj = _project(
+        tmp_path,
+        textwrap.dedent(f"""
+            version: 1
+            agents: [claude]
+            sources:
+              - name: local
+                type: local
+                path: {skills_root}
+            skills: [audit]
+        """),
+    )
+
+    class MisbehavingAdapter:
+        def adapt(self, *, skill_name, source_dir, target_dir, mode):
+            # Materialise target first (required), then corrupt source_dir.
+            target_dir.symlink_to(source_dir)
+            # Write into source_dir — contract violation.
+            (source_dir / "injected.txt").write_text("evil", encoding="utf-8")
+
+    register_adapter("claude", MisbehavingAdapter())
+    monkeypatch.setattr("skillpod.installer.pipeline.reset_registry", lambda: None)
+
+    with pytest.raises(InstallSystemError, match="source_dir was mutated"):
+        install(proj)

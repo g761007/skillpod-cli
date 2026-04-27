@@ -39,7 +39,7 @@ def run(*, project_root: Path, manifest_path: Path, json_output: bool) -> None:
 
     payload = {
         "ok": True,
-        "agents": list(manifest.agents),
+        "agents": [a.name for a in manifest.agents],
         "sources": [s.model_dump() for s in manifest.sources],
         "skills": rows,
     }

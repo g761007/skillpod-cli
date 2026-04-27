@@ -32,6 +32,20 @@ class _StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
 
+class AgentEntry(_StrictModel):
+    """Normalised representation of one entry in the `agents:` list.
+
+    The manifest accepts two forms:
+    - Bare string: ``claude``  (legacy, 0.1.0 compatible)
+    - Object form: ``{name: claude, adapter: my_module.MyAdapter}``
+
+    The loader normalises both into this model before validation.
+    """
+
+    name: Annotated[str, Field(min_length=1)]
+    adapter: str | None = None
+
+
 class RegistrySkillsShPolicy(_StrictModel):
     """Trust-policy knobs for the skills.sh registry.
 
@@ -99,10 +113,21 @@ SkillRef = SkillEntry
 
 
 class InstallPolicy(_StrictModel):
-    """`install:` block."""
+    """`install:` block.
 
-    mode: Literal["symlink"] = "symlink"
+    ``mode`` governs how fan-out entries are materialised:
+    - ``symlink`` (default): create a symbolic link for each agent.
+    - ``copy``: create an independent recursive directory copy.
+    - ``hardlink``: create a tree of hardlinked files (same inode as source).
+
+    ``fallback`` lists modes to try when the primary mode fails (e.g. symlink
+    denied by OS).  The default ``["copy"]`` ensures graceful degradation on
+    hosts that cannot create symlinks.
+    """
+
+    mode: Literal["symlink", "copy", "hardlink"] = "symlink"
     on_missing: Literal["error", "skip"] = "error"
+    fallback: list[Literal["copy"]] = Field(default_factory=lambda: ["copy"])
 
 
 class Skillfile(_StrictModel):
@@ -110,7 +135,7 @@ class Skillfile(_StrictModel):
 
     version: Literal[1] = 1
     registry: RegistryConfig = Field(default_factory=RegistryConfig)
-    agents: list[str] = Field(default_factory=list)
+    agents: list[AgentEntry] = Field(default_factory=list)
     install: InstallPolicy = Field(default_factory=InstallPolicy)
     sources: list[SourceEntry] = Field(default_factory=list)
     skills: list[SkillEntry] = Field(default_factory=list)
@@ -119,15 +144,16 @@ class Skillfile(_StrictModel):
 
     @field_validator("agents")
     @classmethod
-    def _agents_supported(cls, value: list[str]) -> list[str]:
-        unknown = [a for a in value if a not in SUPPORTED_AGENTS]
+    def _agents_supported(cls, value: list[AgentEntry]) -> list[AgentEntry]:
+        unknown = [a.name for a in value if a.name not in SUPPORTED_AGENTS]
         if unknown:
             raise ValueError(
                 "unknown agent(s) "
                 + ", ".join(repr(a) for a in unknown)
                 + f"; supported: {', '.join(SUPPORTED_AGENTS)}"
             )
-        if len(set(value)) != len(value):
+        names = [a.name for a in value]
+        if len(set(names)) != len(names):
             raise ValueError("agents list contains duplicates")
         return value
 
@@ -187,6 +213,7 @@ class Skillfile(_StrictModel):
 
 __all__ = [
     "SUPPORTED_AGENTS",
+    "AgentEntry",
     "InstallPolicy",
     "RegistryConfig",
     "RegistrySkillsShPolicy",

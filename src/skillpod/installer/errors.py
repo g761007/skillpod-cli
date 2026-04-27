@@ -35,7 +35,15 @@ class FrozenDriftError(InstallUserError):
     """Resolved commit or content sha256 disagrees with the lockfile."""
 
 
+class AdapterImportError(InstallUserError):
+    """A custom adapter dotted path could not be imported or resolved.
+
+    Raised before any filesystem mutation so no partial installs occur.
+    """
+
+
 __all__ = [
+    "AdapterImportError",
     "FrozenDriftError",
     "InstallConflict",
     "InstallError",

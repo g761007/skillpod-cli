@@ -8,6 +8,9 @@ from typing import Annotated
 import typer
 
 from skillpod.cli.commands import (
+    adapter as adapter_cmd,
+)
+from skillpod.cli.commands import (
     add as add_cmd,
 )
 from skillpod.cli.commands import (
@@ -51,6 +54,12 @@ global_app = typer.Typer(
     no_args_is_help=True,
 )
 app.add_typer(global_app, name="global", help="Inspect global agent skill directories.")
+
+adapter_app = typer.Typer(
+    help="Inspect and manage the adapter registry.",
+    no_args_is_help=True,
+)
+app.add_typer(adapter_app, name="adapter", help="Inspect the active adapter registry.")
 
 ManifestOpt = Annotated[
     Path,
@@ -143,13 +152,34 @@ def list_(
     )
 
 
-@app.command(help="Re-create symlinks from skillfile.lock without re-resolving.")
+@app.command(help="Re-create fan-out entries from skillfile.lock without re-resolving.")
 def sync(
+    manifest: ManifestOpt = Path("skillfile.yml"),
+    json: JsonOpt = False,
+    agent: Annotated[
+        str | None,
+        typer.Option(
+            "--agent",
+            help="Re-render only this agent's fan-out directory (omit for all agents).",
+        ),
+    ] = None,
+) -> None:
+    manifest_path = manifest if manifest.is_absolute() else (Path.cwd() / manifest).resolve()
+    sync_cmd.run(
+        project_root=_project_root(manifest_path),
+        manifest_path=manifest_path,
+        json_output=json,
+        agent=agent,
+    )
+
+
+@adapter_app.command("list", help="List the active adapter for each declared agent.")
+def adapter_list(
     manifest: ManifestOpt = Path("skillfile.yml"),
     json: JsonOpt = False,
 ) -> None:
     manifest_path = manifest if manifest.is_absolute() else (Path.cwd() / manifest).resolve()
-    sync_cmd.run(
+    adapter_cmd.run(
         project_root=_project_root(manifest_path),
         manifest_path=manifest_path,
         json_output=json,
