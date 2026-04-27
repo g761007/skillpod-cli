@@ -1,16 +1,33 @@
 [project]
 name = "skillpod"
-version = "0.1.0.dev0"
+version = "0.5.0"
 description = "Project-scoped, reproducible skill dependency manager for AI coding agents."
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "MIT" }
+license = { file = "LICENSE" }
 authors = [{ name = "Daniel Hsieh" }]
-keywords = ["ai", "agents", "skills", "dependency-manager", "claude", "codex"]
+keywords = [
+    "ai",
+    "agents",
+    "skills",
+    "dependency-manager",
+    "claude",
+    "claude-code",
+    "codex",
+    "cli",
+]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Software Development :: Build Tools",
+    "Topic :: System :: Software Distribution",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Typing :: Typed",
 ]
 dependencies = [
     "typer>=0.12",
@@ -23,7 +40,10 @@ dependencies = [
 skillpod = "skillpod.cli:app"
 
 [project.urls]
-Homepage = "https://github.com/danielhsieh/skillpod-cli"
+Homepage = "https://github.com/g761007/skillpod-cli"
+Repository = "https://github.com/g761007/skillpod-cli"
+Issues = "https://github.com/g761007/skillpod-cli/issues"
+Changelog = "https://github.com/g761007/skillpod-cli/blob/main/CHANGELOG.md"
 
 [dependency-groups]
 dev = [
@@ -32,6 +52,7 @@ dev = [
     "respx>=0.21",
     "ruff>=0.4",
     "mypy>=1.10",
+    "types-pyyaml>=6.0",
 ]
 
 [build-system]
