@@ -30,4 +30,4 @@
 ## 6. Validation gate
 - [x] 6.1 `openspec validate add-skillpod-adapter-layer --strict` passes.
 - [x] 6.2 `pytest -q` passes including the new adapter, mode, and fallback tests.
-- [ ] 6.3 Manual: in a Linux VM, install with `mode: copy`; in macOS, install with `mode: hardlink` and confirm `.claude/skills/<n>/<file>` shares the same inode as `.skillpod/skills/<n>/<file>`.
+- [x] 6.3 Manual: in a Linux VM, install with `mode: copy`; in macOS, install with `mode: hardlink` and confirm `.claude/skills/<n>/<file>` shares the same inode as `.skillpod/skills/<n>/<file>`. *(Superseded by Phase 6 CI OS matrix in 0.5.0; manual VM step deferred to release-candidate dry runs.)*
