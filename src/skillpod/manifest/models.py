@@ -95,6 +95,9 @@ class SkillEntry(_StrictModel):
     version: str | None = None  # commit-ish; resolved at install time
 
 
+SkillRef = SkillEntry
+
+
 class InstallPolicy(_StrictModel):
     """`install:` block."""
 
@@ -111,6 +114,8 @@ class Skillfile(_StrictModel):
     install: InstallPolicy = Field(default_factory=InstallPolicy)
     sources: list[SourceEntry] = Field(default_factory=list)
     skills: list[SkillEntry] = Field(default_factory=list)
+    groups: dict[str, list[SkillRef]] = Field(default_factory=dict)
+    use: list[str] = Field(default_factory=list)
 
     @field_validator("agents")
     @classmethod
@@ -134,6 +139,23 @@ class Skillfile(_StrictModel):
             raise ValueError("sources have duplicate `name`")
         return value
 
+    @field_validator("groups")
+    @classmethod
+    def _group_names_valid(
+        cls, value: dict[str, list[SkillRef]]
+    ) -> dict[str, list[SkillRef]]:
+        empty = [name for name in value if not name]
+        if empty:
+            raise ValueError("groups contain an empty name")
+        return value
+
+    @field_validator("use")
+    @classmethod
+    def _use_unique(cls, value: list[str]) -> list[str]:
+        if len(set(value)) != len(value):
+            raise ValueError("use list contains duplicates")
+        return value
+
     @model_validator(mode="after")
     def _cross_check(self) -> Skillfile:
         skill_names = [s.name for s in self.skills]
@@ -141,12 +163,25 @@ class Skillfile(_StrictModel):
             raise ValueError("skills have duplicate `name`")
 
         source_names = {s.name for s in self.sources}
-        for skill in self.skills:
+        for skill in [*self.skills, *(member for group in self.groups.values() for member in group)]:
             if skill.source is not None and skill.source not in source_names:
                 raise ValueError(
                     f"skill '{skill.name}': unknown source '{skill.source}'; "
                     f"declared sources: {sorted(source_names) or '<none>'}"
                 )
+
+        missing_groups = [name for name in self.use if name not in self.groups]
+        if missing_groups:
+            raise ValueError(
+                "`use` references unknown group(s): "
+                + ", ".join(repr(name) for name in missing_groups)
+            )
+
+        collisions = sorted(set(skill_names) & set(self.groups))
+        if collisions:
+            raise ValueError(
+                "group/skill name collision: " + ", ".join(repr(name) for name in collisions)
+            )
         return self
 
 
@@ -156,6 +191,7 @@ __all__ = [
     "RegistryConfig",
     "RegistrySkillsShPolicy",
     "SkillEntry",
+    "SkillRef",
     "Skillfile",
     "SourceEntry",
 ]

@@ -769,3 +769,116 @@ def test_doctor_lockfile_drift(runner: CliRunner, tmp_path: Path) -> None:
     result = runner.invoke(app, ["doctor", "--manifest", str(proj2 / "skillfile.yml")])
     assert result.exit_code == 1
     assert "error" in result.stdout.lower() or "lockfile" in result.stdout.lower()
+
+
+# ---- global advisory --------------------------------------------------------
+
+
+def test_global_list_against_fake_home(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    (tmp_path / ".claude" / "skills" / "audit").mkdir(parents=True)
+    (tmp_path / ".codex" / "skills" / "polish").mkdir(parents=True)
+
+    result = runner.invoke(app, ["global", "list", "--json"])
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert {(row["agent"], row["name"]) for row in payload} == {
+        ("claude", "audit"),
+        ("codex", "polish"),
+    }
+    assert all({"agent", "name", "path", "size_bytes", "mtime"} <= set(row) for row in payload)
+
+
+def test_global_archive_renames(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    skill_dir = tmp_path / ".claude" / "skills" / "audit"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "manifest.md").write_text("# audit", encoding="utf-8")
+    proj = tmp_path / "project"
+    proj.mkdir()
+    (proj / "skillfile.yml").write_text("version: 1\nskills: []\n", encoding="utf-8")
+    monkeypatch.chdir(proj)
+
+    result = runner.invoke(app, ["global", "archive", "audit"])
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert not skill_dir.exists()
+    archived = list((tmp_path / ".claude" / "skills").glob("audit.archived-*"))
+    assert len(archived) == 1
+    assert (archived[0] / "manifest.md").read_text(encoding="utf-8") == "# audit"
+
+
+def test_global_doctor_flags_duplicate(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    (tmp_path / ".claude" / "skills" / "audit").mkdir(parents=True)
+    (tmp_path / ".codex" / "skills" / "audit").mkdir(parents=True)
+    proj = tmp_path / "project"
+    proj.mkdir()
+    (proj / "skillfile.yml").write_text("version: 1\nskills: []\n", encoding="utf-8")
+
+    result = runner.invoke(
+        app, ["global", "doctor", "--json", "--manifest", str(proj / "skillfile.yml")]
+    )
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is True
+    assert any(f["code"] == "duplicate-global-skill" for f in payload["findings"])
+
+
+def test_global_doctor_flags_global_local_conflict(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    (tmp_path / ".claude" / "skills" / "audit").mkdir(parents=True)
+    proj = tmp_path / "project"
+    proj.mkdir()
+    (proj / "skillfile.yml").write_text("version: 1\nskills: []\n", encoding="utf-8")
+    (proj / "skillfile.lock").write_text(
+        textwrap.dedent("""
+            version: 1
+            resolved:
+              audit:
+                source: git
+                url: https://example.invalid/audit.git
+                commit: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+                sha256: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+        """).lstrip(),
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        app, ["global", "doctor", "--json", "--manifest", str(proj / "skillfile.yml")]
+    )
+
+    assert result.exit_code == 1
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is False
+    assert any(f["code"] == "global-local-conflict" for f in payload["findings"])
+
+
+def test_global_doctor_flags_broken_symlink(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    skill_link = tmp_path / ".claude" / "skills" / "ghost"
+    skill_link.parent.mkdir(parents=True)
+    skill_link.symlink_to(tmp_path / "missing-target")
+    proj = tmp_path / "project"
+    proj.mkdir()
+    (proj / "skillfile.yml").write_text("version: 1\nskills: []\n", encoding="utf-8")
+
+    result = runner.invoke(
+        app, ["global", "doctor", "--json", "--manifest", str(proj / "skillfile.yml")]
+    )
+
+    assert result.exit_code == 1
+    payload = json.loads(result.stdout)
+    assert any(f["code"] == "broken-global-symlink" for f in payload["findings"])

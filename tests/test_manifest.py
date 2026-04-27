@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from skillpod.installer.expand import flatten
 from skillpod.manifest import (
     InstallPolicy,
     ManifestError,
@@ -81,16 +82,15 @@ def test_skill_referencing_unknown_source_is_rejected() -> None:
 def test_unknown_top_level_key_rejected() -> None:
     """Scenario: Unknown top-level key rejected.
 
-    `groups:` ships in 0.3.0 — in MVP it must be flagged, not silently
-    dropped.
+    Unknown top-level fields must be flagged, not silently dropped.
     """
     text = textwrap.dedent("""
         version: 1
-        groups:
+        typo_groups:
           frontend: [audit]
         skills: []
     """)
-    with pytest.raises(ManifestError, match="groups"):
+    with pytest.raises(ManifestError, match="typo_groups"):
         loads(text)
 
 
@@ -193,6 +193,84 @@ def test_duplicate_source_names_rejected() -> None:
 def test_duplicate_skill_names_rejected() -> None:
     with pytest.raises(ManifestError, match="duplicate `name`"):
         loads("version: 1\nskills: [audit, audit]\n")
+
+
+# ---- Groups / use selectors ------------------------------------------------
+
+
+def test_minimal_manifest_with_one_group() -> None:
+    sf = loads(
+        textwrap.dedent("""
+            version: 1
+            groups:
+              frontend: [audit]
+            skills: []
+        """)
+    )
+    assert sf.groups == {"frontend": [SkillEntry(name="audit")]}
+    assert sf.use == []
+
+
+def test_use_expansion_returns_group_members() -> None:
+    sf = loads(
+        textwrap.dedent("""
+            version: 1
+            groups:
+              frontend: [audit, polish]
+            use: [frontend]
+            skills: []
+        """)
+    )
+    assert [s.name for s in flatten(sf)] == ["audit", "polish"]
+
+
+def test_nested_duplicates_dedup_with_explicit_source_winning() -> None:
+    sf = loads(
+        textwrap.dedent("""
+            version: 1
+            sources:
+              - name: local
+                type: local
+                path: /tmp/skills
+            skills:
+              - polish
+            groups:
+              frontend:
+                - audit
+                - polish
+                - name: polish
+                  source: local
+            use: [frontend]
+        """)
+    )
+    flattened = flatten(sf)
+    assert [s.name for s in flattened] == ["polish", "audit"]
+    assert flattened[0].source == "local"
+
+
+def test_invalid_use_reference_rejected() -> None:
+    with pytest.raises(ManifestError, match="backend"):
+        loads(
+            textwrap.dedent("""
+                version: 1
+                groups:
+                  frontend: [audit]
+                use: [backend]
+                skills: []
+            """)
+        )
+
+
+def test_group_skill_name_collision_rejected() -> None:
+    with pytest.raises(ManifestError, match=r"collide|ambiguous|group"):
+        loads(
+            textwrap.dedent("""
+                version: 1
+                skills: [audit]
+                groups:
+                  audit: [polish]
+            """)
+        )
 
 
 # ---- I/O surface ------------------------------------------------------------

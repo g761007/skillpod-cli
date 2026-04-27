@@ -8,6 +8,7 @@ from skillpod.manifest.models import (
     RegistrySkillsShPolicy,
     SkillEntry,
     Skillfile,
+    SkillRef,
     SourceEntry,
 )
 
@@ -18,6 +19,7 @@ __all__ = [
     "RegistryConfig",
     "RegistrySkillsShPolicy",
     "SkillEntry",
+    "SkillRef",
     "Skillfile",
     "SourceEntry",
     "load",

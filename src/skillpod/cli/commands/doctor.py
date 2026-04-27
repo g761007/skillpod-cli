@@ -19,9 +19,12 @@ from pathlib import Path
 from typing import TypedDict
 
 from skillpod.cli._output import emit, fail
+from skillpod.installer.expand import flatten
 from skillpod.installer.paths import agent_skill_dir, install_root, is_managed_fanout
+from skillpod.installer.user_skills import discover_user_skills
 from skillpod.lockfile import io as lockfile_io
 from skillpod.manifest import load as load_manifest
+from skillpod.manifest.models import SkillEntry
 
 
 class Finding(TypedDict, total=False):
@@ -54,11 +57,19 @@ def run(
     skills_root = install_root(project_root)
     findings: list[Finding] = []
 
+    skills = flatten(manifest)
+    user_skills = discover_user_skills(project_root)
+    skill_names = {skill.name for skill in skills}
+    for name in user_skills:
+        if name not in skill_names:
+            skills.append(SkillEntry(name=name))
+            skill_names.add(name)
+
     # Determine which skills are local-sourced (not lockable).
     source_map = {s.name: s for s in manifest.sources}
     manifest_skill_names: set[str] = set()
 
-    for skill in manifest.skills:
+    for skill in skills:
         manifest_skill_names.add(skill.name)
 
         # Check 1: every non-local manifest skill has a lockfile entry.
@@ -66,7 +77,9 @@ def run(
         # typed as local, OR when it has no lockfile entry but IS materialised
         # (meaning it was installed via a local source without being locked).
         is_local = False
-        if skill.source is not None:
+        if skill.name in user_skills:
+            is_local = True
+        elif skill.source is not None:
             src = source_map.get(skill.source)
             if src is not None and src.type == "local":
                 is_local = True
@@ -100,7 +113,7 @@ def run(
             )
 
     # Check 3: every declared agent fan-out symlink resolves into .skillpod/skills/.
-    for skill in manifest.skills:
+    for skill in skills:
         for agent in manifest.agents:
             link = agent_skill_dir(project_root, agent, skill.name)
             if not link.exists() and not link.is_symlink():

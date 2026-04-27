@@ -129,6 +129,157 @@ def test_agents_not_listed_get_no_fanout(tmp_path: Path) -> None:
         assert not (proj / f".{absent}" / "skills").exists()
 
 
+def test_group_use_expands_before_install(tmp_path: Path) -> None:
+    """`use: [frontend]` installs the group's skills."""
+    skills_root = tmp_path / "pool"
+    for name in ("audit", "polish"):
+        (skills_root / name).mkdir(parents=True)
+        (skills_root / name / "manifest.md").write_text(f"# {name}", encoding="utf-8")
+
+    proj = _project(
+        tmp_path,
+        textwrap.dedent(f"""
+            version: 1
+            agents: [claude]
+            sources:
+              - name: local
+                type: local
+                path: {skills_root}
+            groups:
+              frontend: [audit, polish]
+            use: [frontend]
+            skills: []
+        """),
+    )
+
+    report = install(proj)
+
+    assert [s.name for s in report.installed] == ["audit", "polish"]
+    assert (proj / ".claude" / "skills" / "audit").is_symlink()
+    assert (proj / ".claude" / "skills" / "polish").is_symlink()
+
+
+def test_user_skill_installs_without_manifest_entry(tmp_path: Path) -> None:
+    """A directory under .skillpod/user_skills is an installable skill."""
+    proj = _project(
+        tmp_path,
+        textwrap.dedent("""
+            version: 1
+            agents: [claude]
+            skills: []
+        """),
+    )
+    user_skill = proj / ".skillpod" / "user_skills" / "audit"
+    user_skill.mkdir(parents=True)
+    (user_skill / "manifest.md").write_text("# local audit", encoding="utf-8")
+
+    report = install(proj)
+
+    assert [s.name for s in report.installed] == ["audit"]
+    installed = proj / ".skillpod" / "skills" / "audit"
+    assert installed.is_symlink()
+    assert installed.resolve() == user_skill.resolve()
+    assert (proj / ".claude" / "skills" / "audit").is_symlink()
+
+
+def test_user_skills_shadows_same_name_source(tmp_path: Path) -> None:
+    """user_skills has priority over declared sources."""
+    skills_root = tmp_path / "pool"
+    (skills_root / "audit").mkdir(parents=True)
+    (skills_root / "audit" / "manifest.md").write_text("# source audit", encoding="utf-8")
+    proj = _project(
+        tmp_path,
+        textwrap.dedent(f"""
+            version: 1
+            agents: [claude]
+            sources:
+              - name: local
+                type: local
+                path: {skills_root}
+            skills: [audit]
+        """),
+    )
+    user_skill = proj / ".skillpod" / "user_skills" / "audit"
+    user_skill.mkdir(parents=True)
+    (user_skill / "manifest.md").write_text("# user audit", encoding="utf-8")
+
+    with pytest.warns(UserWarning, match="shadow"):
+        report = install(proj)
+
+    [installed] = report.installed
+    assert installed.resolved.source_kind == "local"
+    assert installed.resolved.source_name is None
+    assert installed.resolved.path == user_skill.resolve()
+    assert (proj / ".skillpod" / "skills" / "audit").resolve() == user_skill.resolve()
+
+
+def test_group_lockfile_matches_flat_equivalent_manifest(tmp_path: Path) -> None:
+    """Group/use is not persisted; lockfile equals a flat manifest install."""
+    audit_repo, audit_sha = make_skill_repo(
+        tmp_path / "audit-side", repo_name="skills", skill_name="audit"
+    )
+    polish_repo, polish_sha = make_skill_repo(
+        tmp_path / "polish-side", repo_name="skills", skill_name="polish"
+    )
+    grouped = _project(
+        tmp_path,
+        textwrap.dedent(f"""
+            version: 1
+            agents: []
+            sources:
+              - name: audit-src
+                type: git
+                url: {audit_repo}
+                ref: main
+              - name: polish-src
+                type: git
+                url: {polish_repo}
+                ref: main
+            groups:
+              frontend:
+                - name: audit
+                  source: audit-src
+                - name: polish
+                  source: polish-src
+            use: [frontend]
+            skills: []
+        """),
+    )
+    flat = tmp_path / "flat"
+    flat.mkdir()
+    (flat / "skillfile.yml").write_text(
+        textwrap.dedent(f"""
+            version: 1
+            agents: []
+            sources:
+              - name: audit-src
+                type: git
+                url: {audit_repo}
+                ref: main
+              - name: polish-src
+                type: git
+                url: {polish_repo}
+                ref: main
+            skills:
+              - name: audit
+                source: audit-src
+              - name: polish
+                source: polish-src
+        """),
+        encoding="utf-8",
+    )
+
+    install(grouped)
+    install(flat)
+
+    grouped_lock = lockfile_pkg.read(grouped / "skillfile.lock")
+    flat_lock = lockfile_pkg.read(flat / "skillfile.lock")
+    assert set(grouped_lock.resolved) == {"audit", "polish"}
+    assert grouped_lock == flat_lock
+    assert grouped_lock.resolved["audit"].commit == audit_sha
+    assert grouped_lock.resolved["polish"].commit == polish_sha
+
+
 # ---- Git source: lockfile written, no registry leakage ---------------------
 
 

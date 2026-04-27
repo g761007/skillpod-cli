@@ -5,8 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from skillpod.cli._output import emit, fail
+from skillpod.installer.expand import flatten
+from skillpod.installer.user_skills import discover_user_skills
 from skillpod.lockfile import io as lockfile_io
 from skillpod.manifest import load as load_manifest
+from skillpod.manifest.models import SkillEntry
 
 
 def run(*, project_root: Path, manifest_path: Path, json_output: bool) -> None:
@@ -16,8 +19,14 @@ def run(*, project_root: Path, manifest_path: Path, json_output: bool) -> None:
     manifest = load_manifest(manifest_path)
     lock = lockfile_io.read(project_root / "skillfile.lock")
 
+    skills = flatten(manifest)
+    known = {skill.name for skill in skills}
+    for name in discover_user_skills(project_root):
+        if name not in known:
+            skills.append(SkillEntry(name=name))
+
     rows: list[dict[str, str | None]] = []
-    for skill in manifest.skills:
+    for skill in skills:
         locked = lock.resolved.get(skill.name)
         rows.append(
             {

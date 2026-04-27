@@ -17,6 +17,7 @@ current run.
 from __future__ import annotations
 
 import shutil
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -26,6 +27,7 @@ from skillpod.installer.errors import (
     InstallSystemError,
     InstallUserError,
 )
+from skillpod.installer.expand import flatten
 from skillpod.installer.fanout import (
     create_install_root_symlink,
     create_managed_fanout_symlink,
@@ -33,11 +35,12 @@ from skillpod.installer.fanout import (
 )
 from skillpod.installer.paths import agent_skill_dir, project_skill_dir
 from skillpod.installer.resolve import resolve_skill
+from skillpod.installer.user_skills import discover_user_skills, resolve_user_skill
 from skillpod.lockfile import io as lockfile_io
 from skillpod.lockfile.integrity import hash_directory
 from skillpod.lockfile.models import LockedSkill, Lockfile
 from skillpod.manifest import load as load_manifest
-from skillpod.manifest.models import Skillfile
+from skillpod.manifest.models import SkillEntry
 from skillpod.registry import RegistryError, TrustError
 from skillpod.sources.errors import GitOperationError, SourceError
 from skillpod.sources.types import ResolvedSkill
@@ -67,7 +70,7 @@ def _project_paths(project_root: Path) -> tuple[Path, Path]:
     )
 
 
-def _lockfile_for(report: InstallReport, manifest: Skillfile) -> Lockfile:
+def _lockfile_for(report: InstallReport) -> Lockfile:
     resolved: dict[str, LockedSkill] = {}
     for entry in report.installed:
         if entry.resolved.source_kind == "local":
@@ -103,21 +106,42 @@ def install(
         raise InstallUserError(str(exc)) from exc
 
     existing_lock = lockfile_io.read(lockfile_path)
+    flat_skills = flatten(manifest)
+    user_skills = discover_user_skills(project_root)
+    flat_names = {skill.name for skill in flat_skills}
+    shadowed = sorted(flat_names & set(user_skills))
+    if shadowed:
+        warnings.warn(
+            ".skillpod/user_skills entries shadow manifest skill(s): "
+            + ", ".join(shadowed),
+            UserWarning,
+            stacklevel=2,
+        )
+
+    effective_skills = list(flat_skills)
+    for name in user_skills:
+        if name not in flat_names:
+            effective_skills.append(SkillEntry(name=name))
 
     # Phase 1 — resolve every skill before mutating the project.
     plan: list[tuple[ResolvedSkill, LockedSkill | None]] = []
-    for skill in manifest.skills:
-        locked_entry = existing_lock.resolved.get(skill.name)
-        try:
-            resolved = resolve_skill(skill, manifest, locked=locked_entry)
-        except TrustError as exc:
-            raise InstallUserError(str(exc)) from exc
-        except RegistryError as exc:
-            raise InstallSystemError(f"registry: {exc}") from exc
-        except GitOperationError as exc:
-            raise InstallSystemError(f"git: {exc}") from exc
-        except SourceError as exc:
-            raise InstallUserError(str(exc)) from exc
+    for skill in effective_skills:
+        user_skill_path = user_skills.get(skill.name)
+        if user_skill_path is not None:
+            resolved = resolve_user_skill(skill.name, user_skill_path)
+            locked_entry = None
+        else:
+            locked_entry = existing_lock.resolved.get(skill.name)
+            try:
+                resolved = resolve_skill(skill, manifest, locked=locked_entry)
+            except TrustError as exc:
+                raise InstallUserError(str(exc)) from exc
+            except RegistryError as exc:
+                raise InstallSystemError(f"registry: {exc}") from exc
+            except GitOperationError as exc:
+                raise InstallSystemError(f"git: {exc}") from exc
+            except SourceError as exc:
+                raise InstallUserError(str(exc)) from exc
 
         if locked_entry is not None and resolved.commit != locked_entry.commit:
             raise FrozenDriftError(
@@ -164,7 +188,7 @@ def install(
             )
 
     # Phase 3 — write lockfile.
-    new_lock = _lockfile_for(report, manifest)
+    new_lock = _lockfile_for(report)
     try:
         lockfile_io.write(lockfile_path, new_lock)
     except OSError as exc:

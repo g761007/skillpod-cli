@@ -22,12 +22,12 @@ class ManifestError(Exception):
     """Raised for any failure loading or validating skillfile.yml."""
 
 
-def _normalise_skills(raw: Any) -> list[dict[str, Any]]:
-    """Expand shorthand strings under `skills:` into object form."""
+def _normalise_skills(raw: Any, *, label: str = "skills") -> list[dict[str, Any]]:
+    """Expand shorthand strings under a skill-entry list into object form."""
     if raw is None:
         return []
     if not isinstance(raw, list):
-        raise ManifestError(f"`skills:` must be a list, got {type(raw).__name__}")
+        raise ManifestError(f"`{label}:` must be a list, got {type(raw).__name__}")
 
     out: list[dict[str, Any]] = []
     for idx, item in enumerate(raw):
@@ -37,8 +37,22 @@ def _normalise_skills(raw: Any) -> list[dict[str, Any]]:
             out.append(item)
         else:
             raise ManifestError(
-                f"`skills[{idx}]`: expected string or mapping, got {type(item).__name__}"
+                f"`{label}[{idx}]`: expected string or mapping, got {type(item).__name__}"
             )
+    return out
+
+
+def _normalise_groups(raw: Any) -> dict[str, list[dict[str, Any]]]:
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise ManifestError(f"`groups:` must be a mapping, got {type(raw).__name__}")
+
+    out: dict[str, list[dict[str, Any]]] = {}
+    for name, members in raw.items():
+        if not isinstance(name, str):
+            raise ManifestError(f"`groups:` keys must be strings, got {type(name).__name__}")
+        out[name] = _normalise_skills(members, label=f"groups.{name}")
     return out
 
 
@@ -58,6 +72,8 @@ def loads(text: str) -> Skillfile:
 
     if "skills" in data:
         data["skills"] = _normalise_skills(data["skills"])
+    if "groups" in data:
+        data["groups"] = _normalise_groups(data["groups"])
 
     try:
         return Skillfile.model_validate(data)

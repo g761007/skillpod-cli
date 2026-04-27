@@ -20,11 +20,13 @@ from skillpod.installer import (
     create_managed_fanout_symlink,
     project_skill_dir,
 )
+from skillpod.installer.expand import flatten
 from skillpod.installer.fanout import rollback_on_failure
 from skillpod.installer.paths import agent_skill_dir
+from skillpod.installer.user_skills import discover_user_skills
 from skillpod.lockfile import io as lockfile_io
 from skillpod.manifest import load as load_manifest
-from skillpod.manifest.models import SourceEntry
+from skillpod.manifest.models import SkillEntry, SourceEntry
 from skillpod.sources.git import populate_cache
 from skillpod.sources.local import resolve_local
 
@@ -51,12 +53,21 @@ def _project_path_from_local(project_root: Path, skill_name: str, manifest_sourc
 def _sync_impl(project_root: Path, manifest_path: Path) -> dict:
     manifest = load_manifest(manifest_path)
     lock = lockfile_io.read(project_root / "skillfile.lock")
+    user_skills = discover_user_skills(project_root)
+    skills = flatten(manifest)
+    skill_names = {skill.name for skill in skills}
+    for name in user_skills:
+        if name not in skill_names:
+            skills.append(SkillEntry(name=name))
+            skill_names.add(name)
 
     rebuilt: list[str] = []
     with rollback_on_failure() as record:
-        for skill in manifest.skills:
+        for skill in skills:
             locked = lock.resolved.get(skill.name)
-            if locked is not None:
+            if skill.name in user_skills:
+                target = user_skills[skill.name]
+            elif locked is not None:
                 cache_dir = _populate_from_lock(locked.url, locked.commit)
                 target = (cache_dir / skill.name).resolve()
             else:

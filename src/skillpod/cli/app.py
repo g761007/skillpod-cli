@@ -14,11 +14,14 @@ from skillpod.cli.commands import (
     doctor as doctor_cmd,
 )
 from skillpod.cli.commands import (
-    init as init_cmd,
-)
-from skillpod.cli.commands import (
+    global_archive,
+    global_doctor,
+    global_list,
     install_cmd,
     list_cmd,
+)
+from skillpod.cli.commands import (
+    init as init_cmd,
 )
 from skillpod.cli.commands import (
     outdated as outdated_cmd,
@@ -42,6 +45,12 @@ app = typer.Typer(
     no_args_is_help=True,
     add_completion=False,
 )
+
+global_app = typer.Typer(
+    help="Inspect and archive global agent skill directories.",
+    no_args_is_help=True,
+)
+app.add_typer(global_app, name="global", help="Inspect global agent skill directories.")
 
 ManifestOpt = Annotated[
     Path,
@@ -199,6 +208,47 @@ def doctor(
 ) -> None:
     manifest_path = manifest if manifest.is_absolute() else (Path.cwd() / manifest).resolve()
     doctor_cmd.run(
+        project_root=_project_root(manifest_path),
+        manifest_path=manifest_path,
+        json_output=json,
+    )
+
+
+@global_app.command("list", help="List global skills across known agents.")
+def global_list_cmd(
+    manifest: ManifestOpt = Path("skillfile.yml"),
+    json: JsonOpt = False,
+) -> None:
+    manifest_path = manifest if manifest.is_absolute() else (Path.cwd() / manifest).resolve()
+    global_list.run(
+        project_root=_project_root(manifest_path),
+        manifest_path=manifest_path,
+        json_output=json,
+    )
+
+
+@global_app.command("archive", help="Rename matching global skill directories.")
+def global_archive_cmd(
+    skill: Annotated[str, typer.Argument(help="Global skill name to archive.")],
+    manifest: ManifestOpt = Path("skillfile.yml"),
+    json: JsonOpt = False,
+) -> None:
+    manifest_path = manifest if manifest.is_absolute() else (Path.cwd() / manifest).resolve()
+    global_archive.run(
+        project_root=_project_root(manifest_path),
+        manifest_path=manifest_path,
+        skill_name=skill,
+        json_output=json,
+    )
+
+
+@global_app.command("doctor", help="Check global skills for advisory conflicts.")
+def global_doctor_cmd(
+    manifest: ManifestOpt = Path("skillfile.yml"),
+    json: JsonOpt = False,
+) -> None:
+    manifest_path = manifest if manifest.is_absolute() else (Path.cwd() / manifest).resolve()
+    global_doctor.run(
         project_root=_project_root(manifest_path),
         manifest_path=manifest_path,
         json_output=json,
