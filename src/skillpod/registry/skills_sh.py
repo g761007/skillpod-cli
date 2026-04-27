@@ -25,6 +25,42 @@ single-skill lookup ``GET <base>/api/skills/<name>`` is::
 
 The base URL is configurable via the environment variable
 ``SKILLPOD_REGISTRY_URL`` so tests can mock it with respx.
+
+# TODO(skills-sh-integration): Real API gap discovered 2026-04-27
+#
+# Probe results (see .omc/research/skills-sh-probe.md for full details):
+#
+#   GET https://skills.sh/api/skills/<name>  → 404
+#     (This path is the Next.js web-UI route [owner]/[repo]/[skill],
+#      not a JSON API endpoint.)
+#
+#   GET https://skills.sh/api/v1/skills/<name>  → 401
+#     {"error":"authentication_required",
+#      "message":"This endpoint requires an API key. Bearer sk_live_..."}
+#     (Internal auth-gated API; no public key available.)
+#
+#   GET https://skills.sh/api/search?q=<name>&limit=10  → 200
+#     {"skills":[{"id":"owner/repo/skillId","skillId":"...","name":"...",
+#                 "installs":N,"source":"owner/repo"}], ...}
+#     (Public search endpoint — returns a flat list, NO git coordinates.)
+#
+# The assumed contract {repo:{host,org,name,url}, ref, commit, meta} does
+# NOT exist as a public API.  The official `skills` CLI (github.com/vercel-labs/skills)
+# resolves git coordinates by:
+#   1. Calling /api/search to get source="owner/repo"
+#   2. Fetching the SKILL.md directly from GitHub (not from skills.sh)
+#
+# To make the integration test pass without a private sk_live_* key, this
+# client would need to:
+#   a) Call /api/search?q=<name> to resolve source="owner/repo"
+#   b) Query the GitHub API for the default-branch HEAD SHA
+#   c) Construct a synthetic RepoInfo from those two sources
+#
+# This is a non-trivial change that affects the trust-policy model (the
+# `meta.verified` field would need a different source).  The existing
+# mock-based test suite (tests/test_registry.py) remains valid as a
+# contract test for a future skills.sh per-skill detail API, or for any
+# registry implementation that does expose this shape.
 """
 
 from __future__ import annotations

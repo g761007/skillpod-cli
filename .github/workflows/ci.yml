@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  test:
+    name: test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "0.4.30"
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Lint
+        run: uv run ruff check src tests
+
+      - name: Test
+        run: uv run pytest -q
+
+      - name: Smoke-test CLI import
+        run: uv run python -c "from skillpod.cli import app; print('cli imports OK')"
+
+  openspec-validate:
+    name: openspec validate
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install openspec CLI
+        # openspec is published on npm as @fission-ai/openspec (the same package
+        # Homebrew installs via the `openspec` formula).
+        run: npm install -g @fission-ai/openspec
+
+      - name: Validate add-skillpod-mvp-install
+        run: openspec validate add-skillpod-mvp-install --strict
+
+      - name: Validate add-skillpod-trust-and-search
+        run: openspec validate add-skillpod-trust-and-search --strict
+
+      - name: Validate add-skillpod-groups
+        run: openspec validate add-skillpod-groups --strict
+
+      - name: Validate add-skillpod-adapter-layer
+        run: openspec validate add-skillpod-adapter-layer --strict
