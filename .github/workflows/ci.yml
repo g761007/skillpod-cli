@@ -2,18 +2,25 @@ name: CI
 
 on:
   push:
-    branches: [master]
+    branches: [main, master]
   pull_request:
-    branches: [master]
+    branches: [main, master]
 
 jobs:
   test:
-    name: test (Python ${{ matrix.python-version }})
-    runs-on: ubuntu-latest
+    name: test (${{ matrix.os }} / Python ${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.experimental }}
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12"]
+        os: [ubuntu-latest, macos-latest]
+        python-version: ["3.11", "3.12", "3.13"]
+        experimental: [false]
+        include:
+          - os: windows-latest
+            python-version: "3.12"
+            experimental: true
 
     steps:
       - uses: actions/checkout@v4
@@ -23,17 +30,50 @@ jobs:
         with:
           version: "0.4.30"
 
+      - name: Set up Python
+        run: uv python install ${{ matrix.python-version }}
+
       - name: Install dependencies
         run: uv sync --frozen
 
       - name: Lint
         run: uv run ruff check src tests
 
+      - name: Type check
+        run: uv run mypy src/skillpod
+
       - name: Test
         run: uv run pytest -q
 
       - name: Smoke-test CLI import
         run: uv run python -c "from skillpod.cli import app; print('cli imports OK')"
+
+  build:
+    name: build sdist + wheel
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "0.4.30"
+
+      - name: Build
+        run: uv build
+
+      - name: Verify packaging metadata
+        run: |
+          uv run --with twine twine check dist/*
+          python -m tarfile -l dist/skillpod-*.tar.gz | grep -E "LICENSE|README|py.typed" || (echo "missing required files in sdist" && exit 1)
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/*
 
   openspec-validate:
     name: openspec validate
@@ -43,18 +83,17 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install openspec CLI
-        # openspec is published on npm as @fission-ai/openspec (the same package
-        # Homebrew installs via the `openspec` formula).
         run: npm install -g @fission-ai/openspec
 
-      - name: Validate add-skillpod-mvp-install
-        run: openspec validate add-skillpod-mvp-install --strict
-
-      - name: Validate add-skillpod-trust-and-search
-        run: openspec validate add-skillpod-trust-and-search --strict
-
-      - name: Validate add-skillpod-groups
-        run: openspec validate add-skillpod-groups --strict
-
-      - name: Validate add-skillpod-adapter-layer
-        run: openspec validate add-skillpod-adapter-layer --strict
+      - name: Validate active changes (if any)
+        run: |
+          changes=$(openspec list --json | python -c "import sys,json;print(' '.join(c['name'] for c in json.load(sys.stdin)['changes']))")
+          if [ -z "$changes" ]; then
+            echo "No active changes to validate."
+            exit 0
+          fi
+          for c in $changes; do
+            echo "::group::validate $c"
+            openspec validate "$c" --strict
+            echo "::endgroup::"
+          done
