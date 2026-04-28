@@ -29,6 +29,18 @@ required to publish.
   `mypy --strict` step.
 - `release.yml` workflow that publishes to PyPI via OIDC Trusted Publisher when
   a `v*` tag is pushed.
+- `skillpod schema` CLI command that exports the JSON Schema for
+  `skillfile.yml` from the pydantic models to stdout via `--json`, or to a file
+  via `--output PATH`.
+- Generated `schemas/skillfile.schema.json` committed to the repo so editors
+  (VS Code, JetBrains) can consume it directly for autocomplete and validation,
+  with a link from the README's Field reference.
+- `skillpod doctor --schema-hints` / `-s` flag that reports which top-level
+  `skillfile.yml` fields are user-explicit versus using model defaults;
+  surfaces in both human and `--json` output.
+- Project-level `cspell.config.yaml` with the project's terminology and
+  `en,en-GB` language so editors stop flagging Commonwealth-English spellings
+  and skillpod-specific identifiers.
 
 ### Changed
 
@@ -36,6 +48,18 @@ required to publish.
 - README rewritten around real, working CLI usage instead of "planned" copy.
 - All four pre-release OpenSpec changes archived under `openspec/changes/archive/`
   and synced into `openspec/specs/`.
+- `examples/skillfile.yml` rewritten as a full schema reference with
+  `[required]` / `[optional, default: …]` / `[conditional]` markers on every
+  key.
+- `README.md` gains a "Field reference" section with per-block tables
+  (top-level, `registry`, `agents[]`, `install`, `sources[]`, `skills[]`) plus
+  a "JSON Schema" subsection.
+- `skillpod init` now writes an annotated skeleton with commented-out `install`
+  and `registry` defaults, instead of the previous 4-line minimum manifest.
+- `openspec/specs/manifest/spec.md` Purpose replaced with a real description;
+  new requirements "Install policy fields" and "Agent entry forms"; the
+  minimal-manifest scenario now includes `install.fallback`'s default of
+  `["copy"]`.
 
 ## [0.4.0] — 2026-04-27 (internal)
 
