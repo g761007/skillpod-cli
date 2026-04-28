@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.3] — 2026-04-28
+
+### Changed
+
+- `skillpod search` now queries the public skills.sh fuzzy-search endpoint
+  (`GET /api/search?q=<query>&limit=<n>`) instead of the assumed-but-missing
+  per-skill detail route (`/api/skills/<name>`, which 404s on the public
+  deployment). Results are now multi-row and reflect installs from the live
+  registry. `--limit` caps how many rows are displayed.
+- The search API does not expose `verified` or `stars`; those columns now
+  render as `-` (and JSON `null`). `passes_policy` is computed from the
+  signals that *are* available: `allow_unverified` plus the `min_installs`
+  threshold.
+
+### Added
+
+- `skillpod.registry.search()` and `SearchHit` dataclass for the
+  search-discovery surface; exported from `skillpod.registry`.
+
+### Notes
+
+- `skillpod.registry.lookup()` is preserved against the historical
+  per-skill detail contract for the install pipeline. Switching the install
+  path to the public registry requires a separate change (resolve via
+  `/api/search` + GitHub API for commit SHAs).
+
 ## [0.5.2] — 2026-04-28
 
 ### Changed
@@ -162,7 +188,8 @@ required to publish.
 - pytest suite covering manifest, lockfile, source resolution, installer,
   and CLI smoke tests.
 
-[Unreleased]: https://github.com/g761007/skillpod-cli/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/g761007/skillpod-cli/compare/v0.5.3...HEAD
+[0.5.3]: https://github.com/g761007/skillpod-cli/releases/tag/v0.5.3
 [0.5.2]: https://github.com/g761007/skillpod-cli/releases/tag/v0.5.2
 [0.5.1]: https://github.com/g761007/skillpod-cli/releases/tag/v0.5.1
 [0.5.0]: https://github.com/g761007/skillpod-cli/releases/tag/v0.5.0

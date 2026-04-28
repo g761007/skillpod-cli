@@ -6,7 +6,13 @@ from skillpod.registry.errors import (
     RegistryNotFound,
     RegistryUnavailable,
 )
-from skillpod.registry.skills_sh import DEFAULT_BASE_URL, RepoInfo, lookup
+from skillpod.registry.skills_sh import (
+    DEFAULT_BASE_URL,
+    RepoInfo,
+    SearchHit,
+    lookup,
+    search,
+)
 from skillpod.registry.trust import TrustError, enforce
 
 __all__ = [
@@ -16,7 +22,9 @@ __all__ = [
     "RegistryNotFound",
     "RegistryUnavailable",
     "RepoInfo",
+    "SearchHit",
     "TrustError",
     "enforce",
     "lookup",
+    "search",
 ]

@@ -1,10 +1,14 @@
 """`skillpod search <query>` — query the registry and display results.
 
-MVP limitation: there is no list/search endpoint on skills.sh yet, so this
-command treats ``<query>`` as an exact skill name and calls ``registry.lookup``
-once, returning at most one row.  A richer full-text search endpoint (and the
-``--limit`` cap it implies) will be wired in a future change once the registry
-exposes it.
+Backed by skills.sh's public ``/api/search?q=<query>&limit=<n>`` endpoint
+(see :func:`skillpod.registry.search`).  Results are fuzzy and may include
+multiple skills; ``--limit`` caps how many rows are displayed.
+
+The search API does not expose ``verified`` or ``stars`` — those columns
+render as ``-``, and ``passes-policy`` is computed from the signals that
+*are* available (``installs`` threshold and ``allow_unverified``).  For
+strict pinned-commit installs use ``skillpod add``, which goes through
+the per-skill detail surface in :func:`skillpod.registry.lookup`.
 """
 
 from __future__ import annotations
@@ -17,10 +21,8 @@ from skillpod.manifest import load as load_manifest
 from skillpod.manifest.models import RegistrySkillsShPolicy
 from skillpod.registry import (
     RegistryError,
-    RegistryNotFound,
-    TrustError,
-    enforce,
-    lookup,
+    SearchHit,
+    search,
 )
 
 
@@ -43,33 +45,31 @@ def run(
     else:
         policy = RegistrySkillsShPolicy()
 
-    # Perform lookup — treat query as exact skill name (MVP, see module docstring).
     try:
-        info = lookup(query)
-    except RegistryNotFound:
-        # Zero results is not an error.
-        _render(query, [], json_output=json_output)
-        return
+        hits = search(query, limit=limit)
     except RegistryError as exc:
         raise fail(str(exc), code=2, json_output=json_output) from exc
 
-    # Evaluate trust policy — do NOT abort; just record the verdict.
-    try:
-        enforce(policy, info)
-        passes_policy = True
-    except TrustError:
-        passes_policy = False
+    rows = [_row_for_hit(hit, policy) for hit in hits[:limit]]
+    _render(query, rows, json_output=json_output)
 
-    row = {
-        "name": info.name,
-        "repo": info.url,
-        "installs": info.installs,
-        "stars": info.stars,
-        "verified": info.verified,
+
+def _row_for_hit(
+    hit: SearchHit, policy: RegistrySkillsShPolicy
+) -> dict[str, Any]:
+    # The public search API does not expose `verified` or `stars`, so we
+    # cannot enforce those thresholds — pass only when `allow_unverified`
+    # is on AND the installs threshold is met.
+    passes_policy = policy.allow_unverified and hit.installs >= policy.min_installs
+    return {
+        "name": hit.name,
+        "repo": hit.url,
+        "source": hit.source,
+        "installs": hit.installs,
+        "stars": None,
+        "verified": None,
         "passes_policy": passes_policy,
     }
-    results = [row][:limit]
-    _render(query, results, json_output=json_output)
 
 
 def _render(query: str, results: list[dict[str, Any]], *, json_output: bool) -> None:
@@ -82,21 +82,19 @@ def _render(query: str, results: list[dict[str, Any]], *, json_output: bool) -> 
         emit(payload, json_output=False, human=f"No results for {query!r}.")
         return
 
-    # Column order: name | repo | installs | stars | verified | passes-policy
     col_headers = ["name", "repo", "installs", "stars", "verified", "passes-policy"]
     rows_display = [
         [
             r["name"],
             r["repo"],
             str(r["installs"]),
-            str(r["stars"]),
-            str(r["verified"]).lower(),
+            "-" if r["stars"] is None else str(r["stars"]),
+            "-" if r["verified"] is None else str(r["verified"]).lower(),
             str(r["passes_policy"]).lower(),
         ]
         for r in results
     ]
 
-    # Compute column widths.
     widths = [len(h) for h in col_headers]
     for row in rows_display:
         for i, cell in enumerate(row):

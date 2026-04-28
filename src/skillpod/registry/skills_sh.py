@@ -1,66 +1,40 @@
 """skills.sh client.
 
-skills.sh is treated as a *discovery* layer only — it answers "given the
-skill name `audit`, which git repo and commit should I install?" and
-nothing more.
+skills.sh is treated as a *discovery* layer only.  Two surfaces are used:
 
-We do not own the registry, so the JSON contract here is intentionally
-small and tolerant of extra keys. The minimal shape we require for a
-single-skill lookup ``GET <base>/api/skills/<name>`` is::
+1. ``GET <base>/api/search?q=<query>&limit=<n>`` — public fuzzy-search API
+   used by the ``skillpod search`` command.  Returns a flat list of hits::
 
-    {
-      "name": "audit",
-      "repo": {
-        "host": "github.com",
-        "org":  "vercel-labs",
-        "name": "agent-skills",
-        "url":  "https://github.com/vercel-labs/agent-skills"
-      },
-      "ref":    "main",
-      "commit": "<40-char-sha>",
-      "meta":   { "verified": true, "installs": 1234, "stars": 56 }
-    }
+       {"query": "...", "skills": [
+           {"id": "owner/repo/skillId", "skillId": "...", "name": "...",
+            "installs": N, "source": "owner/repo"},
+           ...
+       ], "count": N}
 
-`meta` is optional in 0.1.0 (used only for trust policy in 0.2.0).
+   No git coordinates (ref/commit) and no trust signals (verified/stars)
+   are exposed here — only ``installs``.
+
+2. ``GET <base>/api/skills/<name>`` — *historical* per-skill detail
+   contract used by the install pipeline (``installer/resolve.py``).  The
+   public skills.sh deployment does NOT serve this path (it 404s — the
+   path is a Next.js web-UI route).  ``lookup()`` is preserved against
+   this contract so it can talk to a future per-skill detail API or a
+   self-hosted registry mirror.  The expected shape is::
+
+       {
+         "name": "audit",
+         "repo": {"host": "github.com", "org": "...", "name": "...",
+                  "url": "https://github.com/.../..."},
+         "ref": "main",
+         "commit": "<40-char-sha>",
+         "meta": {"verified": true, "installs": 1234, "stars": 56}
+       }
 
 The base URL is configurable via the environment variable
-``SKILLPOD_REGISTRY_URL`` so tests can mock it with respx.
+``SKILLPOD_REGISTRY_URL`` so tests can mock both endpoints with respx.
 
-# TODO(skills-sh-integration): Real API gap discovered 2026-04-27
-#
-# Probe results (see .omc/research/skills-sh-probe.md for full details):
-#
-#   GET https://skills.sh/api/skills/<name>  → 404
-#     (This path is the Next.js web-UI route [owner]/[repo]/[skill],
-#      not a JSON API endpoint.)
-#
-#   GET https://skills.sh/api/v1/skills/<name>  → 401
-#     {"error":"authentication_required",
-#      "message":"This endpoint requires an API key. Bearer sk_live_..."}
-#     (Internal auth-gated API; no public key available.)
-#
-#   GET https://skills.sh/api/search?q=<name>&limit=10  → 200
-#     {"skills":[{"id":"owner/repo/skillId","skillId":"...","name":"...",
-#                 "installs":N,"source":"owner/repo"}], ...}
-#     (Public search endpoint — returns a flat list, NO git coordinates.)
-#
-# The assumed contract {repo:{host,org,name,url}, ref, commit, meta} does
-# NOT exist as a public API.  The official `skills` CLI (github.com/vercel-labs/skills)
-# resolves git coordinates by:
-#   1. Calling /api/search to get source="owner/repo"
-#   2. Fetching the SKILL.md directly from GitHub (not from skills.sh)
-#
-# To make the integration test pass without a private sk_live_* key, this
-# client would need to:
-#   a) Call /api/search?q=<name> to resolve source="owner/repo"
-#   b) Query the GitHub API for the default-branch HEAD SHA
-#   c) Construct a synthetic RepoInfo from those two sources
-#
-# This is a non-trivial change that affects the trust-policy model (the
-# `meta.verified` field would need a different source).  The existing
-# mock-based test suite (tests/test_registry.py) remains valid as a
-# contract test for a future skills.sh per-skill detail API, or for any
-# registry implementation that does expose this shape.
+See ``.omc/research/skills-sh-probe.md`` for the original probe of the
+public skills.sh API.
 """
 
 from __future__ import annotations
@@ -176,6 +150,96 @@ def lookup(name: str, *, client: httpx.Client | None = None) -> RepoInfo:
             http.close()
 
 
+@dataclass(frozen=True)
+class SearchHit:
+    """One row from the public ``/api/search`` endpoint.
+
+    The public search API exposes only a small subset of what ``RepoInfo``
+    can carry.  Notably, ``ref``/``commit`` (git coordinates) and
+    ``verified``/``stars`` (trust signals) are NOT available — the search
+    surface is a discovery aid, not an install target.
+    """
+
+    name: str
+    skill_id: str
+    full_id: str
+    source: str
+    installs: int
+    url: str
+
+
+def _parse_search_hit(raw: dict[str, Any]) -> SearchHit:
+    name = str(_require(raw, "name"))
+    skill_id = str(_require(raw, "skillId"))
+    full_id = str(_require(raw, "id"))
+    source = str(_require(raw, "source"))
+    installs = int(raw.get("installs", 0) or 0)
+    url = f"https://github.com/{source}" if "/" in source else source
+    return SearchHit(
+        name=name,
+        skill_id=skill_id,
+        full_id=full_id,
+        source=source,
+        installs=installs,
+        url=url,
+    )
+
+
+def search(
+    query: str,
+    *,
+    limit: int = 20,
+    client: httpx.Client | None = None,
+) -> list[SearchHit]:
+    """Query the public ``/api/search`` endpoint on skills.sh.
+
+    Returns a list of :class:`SearchHit` objects (possibly empty).  Raises
+    :class:`RegistryUnavailable` for transport/HTTP errors and
+    :class:`RegistryMalformed` if the JSON shape does not match the
+    documented contract.
+
+    Note: search is fuzzy and may return rows whose ``name`` does not
+    equal *query*; the caller decides how to filter or rank results.
+    """
+    if limit < 1:
+        limit = 1
+    url = f"{_base_url()}/api/search"
+    params: dict[str, str] = {"q": query, "limit": str(limit)}
+    own_client = client is None
+    http = client or httpx.Client(timeout=httpx.Timeout(10.0))
+    try:
+        try:
+            resp = http.get(url, params=params)
+        except httpx.RequestError as exc:
+            raise RegistryUnavailable(f"registry request to {url} failed: {exc}") from exc
+
+        if resp.status_code >= 400:
+            raise RegistryUnavailable(
+                f"registry returned HTTP {resp.status_code} for {url}"
+            )
+
+        try:
+            data = resp.json()
+        except ValueError as exc:
+            raise RegistryMalformed(f"registry response was not JSON: {exc}") from exc
+        if not isinstance(data, dict):
+            raise RegistryMalformed("registry response: top level is not an object")
+
+        skills = data.get("skills", [])
+        if not isinstance(skills, list):
+            raise RegistryMalformed("registry response: `skills` is not a list")
+
+        hits: list[SearchHit] = []
+        for raw in skills:
+            if not isinstance(raw, dict):
+                raise RegistryMalformed("registry response: skill entry is not an object")
+            hits.append(_parse_search_hit(raw))
+        return hits
+    finally:
+        if own_client:
+            http.close()
+
+
 __all__ = [
     "DEFAULT_BASE_URL",
     "RegistryError",
@@ -183,5 +247,7 @@ __all__ = [
     "RegistryNotFound",
     "RegistryUnavailable",
     "RepoInfo",
+    "SearchHit",
     "lookup",
+    "search",
 ]

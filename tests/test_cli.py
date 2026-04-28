@@ -365,28 +365,33 @@ def test_sync_does_not_call_registry(
 # ---- search -----------------------------------------------------------------
 
 
+def _search_payload(*hits: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "query": hits[0]["name"] if hits else "",
+        "searchType": "fuzzy",
+        "skills": list(hits),
+        "count": len(hits),
+        "duration_ms": 0,
+    }
+
+
 @respx.mock
 def test_search_returns_one_row_for_matching_skill(
     runner: CliRunner, tmp_path: Path
 ) -> None:
-    """search: registry hit → one row with passes_policy=true for verified skill."""
-    from tests._git_fixtures import make_skill_repo as _make
-    repo_path, sha = _make(tmp_path / "git-side")
-    respx.get(f"{_REGISTRY_BASE}/api/skills/audit").mock(
+    """search: /api/search hit → one row rendered with installs."""
+    respx.get(f"{_REGISTRY_BASE}/api/search").mock(
         return_value=httpx.Response(
             200,
-            json={
-                "name": "audit",
-                "repo": {
-                    "host": "github.com",
-                    "org": "vercel-labs",
-                    "name": "agent-skills",
-                    "url": str(repo_path),
-                },
-                "ref": "main",
-                "commit": sha,
-                "meta": {"verified": True, "installs": 5000, "stars": 200},
-            },
+            json=_search_payload(
+                {
+                    "id": "vercel-labs/agent-skills/audit",
+                    "skillId": "audit",
+                    "name": "audit",
+                    "installs": 5000,
+                    "source": "vercel-labs/agent-skills",
+                }
+            ),
         )
     )
     proj = tmp_path / "project"
@@ -394,30 +399,26 @@ def test_search_returns_one_row_for_matching_skill(
     result = runner.invoke(app, ["search", "audit", "--manifest", str(proj / "skillfile.yml")])
     assert result.exit_code == 0, result.stdout + result.stderr
     assert "audit" in result.stdout
+    assert "vercel-labs/agent-skills" in result.stdout
 
 
 @respx.mock
 def test_search_json_shape_stable(
     runner: CliRunner, tmp_path: Path
 ) -> None:
-    """search --json: output matches spec §1 scenario 'Search JSON output'."""
-    from tests._git_fixtures import make_skill_repo as _make
-    repo_path, sha = _make(tmp_path / "git-side")
-    respx.get(f"{_REGISTRY_BASE}/api/skills/audit").mock(
+    """search --json: output exposes name/repo/installs and trust columns."""
+    respx.get(f"{_REGISTRY_BASE}/api/search").mock(
         return_value=httpx.Response(
             200,
-            json={
-                "name": "audit",
-                "repo": {
-                    "host": "github.com",
-                    "org": "vercel-labs",
-                    "name": "agent-skills",
-                    "url": str(repo_path),
-                },
-                "ref": "main",
-                "commit": sha,
-                "meta": {"verified": True, "installs": 5000, "stars": 200},
-            },
+            json=_search_payload(
+                {
+                    "id": "vercel-labs/agent-skills/audit",
+                    "skillId": "audit",
+                    "name": "audit",
+                    "installs": 5000,
+                    "source": "vercel-labs/agent-skills",
+                }
+            ),
         )
     )
     proj = tmp_path / "project"
@@ -431,10 +432,12 @@ def test_search_json_shape_stable(
     assert len(payload["results"]) == 1
     row = payload["results"][0]
     assert row["name"] == "audit"
-    assert "repo" in row
-    assert "installs" in row
-    assert "stars" in row
-    assert "verified" in row
+    assert row["repo"] == "https://github.com/vercel-labs/agent-skills"
+    assert row["source"] == "vercel-labs/agent-skills"
+    assert row["installs"] == 5000
+    # Search API does not expose verified/stars — they surface as null.
+    assert row["stars"] is None
+    assert row["verified"] is None
     assert "passes_policy" in row
 
 
@@ -442,9 +445,12 @@ def test_search_json_shape_stable(
 def test_search_not_found_returns_zero_rows(
     runner: CliRunner, tmp_path: Path
 ) -> None:
-    """search: RegistryNotFound → 0 rows, exit 0."""
-    respx.get(f"{_REGISTRY_BASE}/api/skills/ghost").mock(
-        return_value=httpx.Response(404)
+    """search: empty `skills` list → 0 rows, exit 0."""
+    respx.get(f"{_REGISTRY_BASE}/api/search").mock(
+        return_value=httpx.Response(
+            200,
+            json={"query": "ghost", "skills": [], "count": 0},
+        )
     )
     proj = tmp_path / "project"
     proj.mkdir()
@@ -456,24 +462,19 @@ def test_search_not_found_returns_zero_rows(
 def test_search_marks_policy_failing_row(
     runner: CliRunner, tmp_path: Path
 ) -> None:
-    """search: unverified skill with strict policy → passes_policy=false, still shown."""
-    from tests._git_fixtures import make_skill_repo as _make
-    repo_path, sha = _make(tmp_path / "git-side")
-    respx.get(f"{_REGISTRY_BASE}/api/skills/audit").mock(
+    """search: default strict policy → passes_policy=false (verified unknown), still shown."""
+    respx.get(f"{_REGISTRY_BASE}/api/search").mock(
         return_value=httpx.Response(
             200,
-            json={
-                "name": "audit",
-                "repo": {
-                    "host": "github.com",
-                    "org": "vercel-labs",
-                    "name": "agent-skills",
-                    "url": str(repo_path),
-                },
-                "ref": "main",
-                "commit": sha,
-                "meta": {"verified": False, "installs": 0, "stars": 0},
-            },
+            json=_search_payload(
+                {
+                    "id": "vercel-labs/agent-skills/audit",
+                    "skillId": "audit",
+                    "name": "audit",
+                    "installs": 0,
+                    "source": "vercel-labs/agent-skills",
+                }
+            ),
         )
     )
     proj = tmp_path / "project"
