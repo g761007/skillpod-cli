@@ -335,6 +335,38 @@ IDEs can use this schema for autocomplete and validation.
 `--help` on any subcommand shows full options. `--json` produces
 machine-readable output where it makes sense.
 
+### `skillpod global archive`
+
+Consolidates scattered global skills from agent directories
+(`~/.<agent>/skills/<name>`) into the canonical location
+`~/.skillpod/skills/<name>`.
+
+| Invocation | Effect |
+| --- | --- |
+| `skillpod global archive` | Show usage help |
+| `skillpod global archive '*'` | Archive **every** global skill at once |
+| `skillpod global archive <name>` | Archive a single named skill |
+| `skillpod global archive <n1> <n2> …` | Archive several named skills in one pass |
+
+Skills that are already managed by skillpod — i.e. `~/.skillpod/skills/<name>` exists
+and every agent copy is a symlink pointing there (installed via `skillpod add --global`) — are
+**automatically skipped** in wildcard and multi-name modes and reported as `skipped_managed`
+in `--json` output.
+
+> **Shell note:** Quote the asterisk (`'*'`) or the shell will expand it to filenames in the
+> current directory.
+
+```bash
+# archive every unmanaged global skill in one step
+skillpod global archive '*'
+
+# archive two specific skills
+skillpod global archive my-linter code-review
+
+# machine-readable output for scripting
+skillpod global archive '*' --json
+```
+
 ---
 
 ## Roadmap & status

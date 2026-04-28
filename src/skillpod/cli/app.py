@@ -368,13 +368,18 @@ def global_list_cmd(
 
 @global_app.command(
     "archive",
-    help="Move matching global skills into ~/.skillpod/skills/<name> and clean up agent copies.",
+    help="Move global skills into ~/.skillpod/skills/<name> and clean up agent copies.",
 )
 def global_archive_cmd(
+    ctx: typer.Context,
     skill: Annotated[
         list[str] | None,
         typer.Argument(
-            help="Skill name(s) to archive. Accepts multiple names. Omit to archive all global skills."
+            help=(
+                "Skill name(s) to archive. "
+                "Pass '*' to archive every global skill at once. "
+                "Omit to show this help."
+            )
         ),
     ] = None,
     manifest: ManifestOpt = Path("skillfile.yml"),
@@ -388,11 +393,15 @@ def global_archive_cmd(
         ),
     ] = False,
 ) -> None:
+    if not skill:
+        typer.echo(ctx.get_help())
+        raise typer.Exit()
     manifest_path = manifest if manifest.is_absolute() else (Path.cwd() / manifest).resolve()
+    skill_names: list[str] = [] if skill == ["*"] else list(skill)
     global_archive.run(
         project_root=_project_root(manifest_path),
         manifest_path=manifest_path,
-        skill_names=list(skill) if skill else [],
+        skill_names=skill_names,
         json_output=json,
         force=force,
     )
