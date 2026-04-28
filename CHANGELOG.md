@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.5] — 2026-04-28
+
+### Fixed
+
+- **`skillpod add owner/repo` now auto-detects the remote's default
+  branch.** Previously `--ref` defaulted to `"main"`, so adding a
+  repository whose default branch is `master` (e.g.
+  `alchaincyf/huashu-design`) failed with `git ls-remote --exit-code
+  <url> main` returning exit 2. The CLI option now defaults to `None`;
+  when omitted, the resolver runs `git ls-remote --symref <url> HEAD` to
+  discover the actual default branch and writes the concrete name (e.g.
+  `master`) into `skillfile.yml` for reproducibility. Explicit `--ref`
+  values continue to be respected.
+
 ## [0.5.4] — 2026-04-28
 
 ### Fixed
