@@ -20,8 +20,8 @@ from typing import Any
 
 from skillpod.cli._output import emit, fail, run_with_exit_codes
 from skillpod.installer import (
-    create_install_root_symlink,
     create_managed_fanout_symlink,
+    materialise_install_root,
     project_skill_dir,
 )
 from skillpod.installer.errors import InstallUserError
@@ -98,7 +98,12 @@ def _sync_impl(
                 target = _project_path_from_local(project_root, skill.name, manifest.sources)
 
             skill_link = project_skill_dir(project_root, skill.name)
-            create_install_root_symlink(skill_link, target, record=record)
+            materialise_install_root(
+                skill_link,
+                target,
+                skill_name=skill.name,
+                record=record,
+            )
 
             for agent_name in active_agents:
                 fanout = agent_skill_dir(project_root, agent_name, skill.name)

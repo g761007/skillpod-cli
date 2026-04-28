@@ -109,7 +109,9 @@ def test_install_local_skill_with_explicit_manifest_path(
         app, ["install", "--manifest", str(proj / "skillfile.yml")]
     )
     assert result.exit_code == 0, result.stdout + result.stderr
-    assert (proj / ".skillpod" / "skills" / "audit").is_symlink()
+    install_root = proj / ".skillpod" / "skills" / "audit"
+    assert install_root.is_dir()
+    assert not install_root.is_symlink()
     assert (proj / ".claude" / "skills" / "audit").is_symlink()
 
 
@@ -178,7 +180,9 @@ def test_add_then_remove_round_trip(
     assert add_result.exit_code == 0, add_result.stdout + add_result.stderr
     manifest_after_add = (proj / "skillfile.yml").read_text(encoding="utf-8")
     assert "audit" in manifest_after_add
-    assert (proj / ".skillpod" / "skills" / "audit").is_symlink()
+    install_root = proj / ".skillpod" / "skills" / "audit"
+    assert install_root.is_dir()
+    assert not install_root.is_symlink()
     assert (proj / ".claude" / "skills" / "audit").is_symlink()
 
     remove_result = runner.invoke(
@@ -318,7 +322,9 @@ def test_sync_recreates_from_lockfile_idempotently(
         app, ["sync", "--manifest", str(proj / "skillfile.yml")]
     )
     assert sync_result.exit_code == 0, sync_result.stdout + sync_result.stderr
-    assert (proj / ".skillpod" / "skills" / "audit").is_symlink()
+    install_root = proj / ".skillpod" / "skills" / "audit"
+    assert install_root.is_dir()
+    assert not install_root.is_symlink()
     assert (proj / ".claude" / "skills" / "audit").is_symlink()
     assert (proj / ".codex" / "skills" / "audit").is_symlink()
 

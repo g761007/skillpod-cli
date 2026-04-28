@@ -34,8 +34,8 @@ from skillpod.installer.errors import (
 )
 from skillpod.installer.expand import flatten
 from skillpod.installer.fanout import (
-    create_install_root_symlink,
     materialise_fanout,
+    materialise_install_root,
     rollback_on_failure,
 )
 from skillpod.installer.paths import agent_skill_dir, project_skill_dir
@@ -197,7 +197,12 @@ def install(
     with rollback_on_failure() as record:
         for resolved, locked_entry in plan:
             skill_link = project_skill_dir(project_root, resolved.name)
-            create_install_root_symlink(skill_link, resolved.path, record=record)
+            materialise_install_root(
+                skill_link,
+                resolved.path,
+                skill_name=resolved.name,
+                record=record,
+            )
 
             sha256: str | None = None
             if resolved.source_kind != "local":

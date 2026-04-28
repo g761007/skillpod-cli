@@ -1,25 +1,32 @@
-"""Symlink creation, mode-aware materialisation, rollback + safety checks.
+"""Install-root materialisation, mode-aware fan-out, rollback + safety checks.
 
-``create_install_root_symlink`` and ``create_managed_fanout_symlink`` are kept
-for backward-compat; new code should use ``materialise_fanout``.
+``materialise_install_root`` and ``create_managed_fanout_symlink`` are kept
+for backward-compat call sites; new code should use ``materialise_fanout`` for
+the fan-out side.
 
-``create_install_root_symlink`` is always symlink-only — ``.skillpod/skills/<name>/``
-is always a symlink to the source location regardless of ``install.mode``.
-The ``install.mode`` only governs the fan-out side.
+``materialise_install_root`` is always **real-directory copy**:
+``.skillpod/skills/<name>/`` is materialised as a self-contained directory
+(via ``shutil.copytree`` through the IdentityAdapter) regardless of
+``install.mode``. This means clearing ``~/.cache/skillpod/`` does not break
+already-installed skills. The ``install.mode`` only governs the agent
+fan-out side.
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import shutil
 import warnings
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager, suppress
 from pathlib import Path
 
 from skillpod.installer.adapter import Adapter, InstallMode
+from skillpod.installer.adapter_default import IdentityAdapter
 from skillpod.installer.errors import InstallConflict, InstallSystemError
 from skillpod.installer.paths import is_managed_fanout
+from skillpod.lockfile.integrity import hash_directory
 
 logger = logging.getLogger(__name__)
 
@@ -56,31 +63,101 @@ def _create_symlink(link: Path, target: Path) -> None:
         raise InstallSystemError(f"could not create symlink {link} -> {target}: {exc}") from exc
 
 
+def materialise_install_root(
+    link: Path,
+    source: Path,
+    *,
+    skill_name: str,
+    record: Callable[[Path], None],
+    force: bool = False,
+) -> None:
+    """Materialise ``link`` as a real-directory copy of ``source`` under
+    ``.skillpod/skills/<name>``.
+
+    ``.skillpod/skills/`` is owned entirely by skillpod. Behaviour:
+
+    - Path missing → ``copytree(source, link)``.
+    - Existing symlink (legacy install or broken cache pointer) → ``unlink``
+      then copy.
+    - Existing real directory whose content hash matches ``source`` →
+      idempotent skip.
+    - Existing real directory with different content → raise
+      ``InstallConflict`` unless ``force=True`` (then ``rmtree`` + copy).
+
+    The install root is never a symlink — clearing ``~/.cache/skillpod`` is
+    therefore safe for already-installed skills. Only the agent fan-out side
+    is governed by ``install.mode``.
+    """
+    if link.is_symlink():
+        link.unlink()
+    elif link.is_dir():
+        try:
+            existing_digest = hash_directory(link)
+            source_digest = hash_directory(source)
+        except (FileNotFoundError, OSError) as exc:
+            raise InstallSystemError(
+                f"could not compare contents at {link}: {exc}"
+            ) from exc
+        if existing_digest == source_digest:
+            # Idempotent: install root already matches source. Do not
+            # ``record(link)`` — we made no change, so rollback must not
+            # delete the pre-existing directory if a later step fails.
+            return
+        if not force:
+            raise InstallConflict(
+                f"refusing to overwrite existing path at {link} with different "
+                f"content (skillpod owns .skillpod/skills/ — pass --yes / -y "
+                f"to replace, or remove it manually)"
+            )
+        shutil.rmtree(link)
+    elif link.exists():
+        if not force:
+            raise InstallConflict(
+                f"refusing to overwrite non-directory at {link} "
+                f"(skillpod owns .skillpod/skills/ — remove it manually if intentional)"
+            )
+        link.unlink()
+
+    link.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        IdentityAdapter().adapt(
+            skill_name=skill_name,
+            source_dir=source,
+            target_dir=link,
+            mode=InstallMode.COPY,
+        )
+    except OSError as exc:
+        raise InstallSystemError(
+            f"could not materialise install root {link} from {source}: {exc}"
+        ) from exc
+    record(link)
+
+
+# Backward-compat shim — old name retained so external callers (and any
+# stale plans) still resolve.  Internally this now performs a copy, not a
+# symlink.
 def create_install_root_symlink(
     link: Path,
     target: Path,
     *,
     record: Callable[[Path], None],
 ) -> None:
-    """Create ``link -> target`` under ``.skillpod/skills/<name>``.
+    """Deprecated alias for :func:`materialise_install_root`.
 
-    ``.skillpod/skills/`` is owned entirely by skillpod; any existing
-    symlink there can be replaced. Refuse if it's a real directory or
-    file (probably user mistake).
-
-    This function is always symlink-only — the install root is never
-    materialised as a copy or hardlink tree.  Only the agent fan-out
-    side is governed by ``install.mode``.
+    Kept for one release to avoid breaking out-of-tree call sites.
     """
-    if link.is_symlink():
-        link.unlink()
-    elif link.exists():
-        raise InstallConflict(
-            f"refusing to overwrite non-symlink at {link} "
-            f"(skillpod owns .skillpod/skills/ — remove it manually if intentional)"
-        )
-    _create_symlink(link, target)
-    record(link)
+    warnings.warn(
+        "create_install_root_symlink is deprecated; use materialise_install_root. "
+        "The install root is now a real-directory copy, not a symlink.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    materialise_install_root(
+        link,
+        target,
+        skill_name=link.name,
+        record=record,
+    )
 
 
 def create_managed_fanout_symlink(
@@ -285,8 +362,9 @@ def _attempt_with_fallback(
 
 
 __all__ = [
-    "create_install_root_symlink",
+    "create_install_root_symlink",  # deprecated alias
     "create_managed_fanout_symlink",
     "materialise_fanout",
+    "materialise_install_root",
     "rollback_on_failure",
 ]

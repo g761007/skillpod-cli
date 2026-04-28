@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Install root is now a real-directory copy, not a symlink into the
+  cache.** `.skillpod/skills/<name>/` (project) and
+  `~/.skillpod/skills/<name>/` (global) are materialised via
+  `shutil.copytree` from the source. Previously they were symlinks
+  pointing into `~/.cache/skillpod/<host>/<org>/<repo>@<commit>/`, which
+  meant clearing the cache (manually or by macOS housekeeping) silently
+  broke every installed skill.
+- Re-running `install` / `add -g` is hash-idempotent: when the install
+  root's content already matches the source, no rewrite happens. When
+  content differs, the install fails unless `--yes / -y` is passed
+  (matching the previous force semantics).
+- Agent fan-out (`.<agent>/skills/<name>`, `~/.<agent>/skills/<name>`)
+  continues to default to `symlink`. Targets now resolve to a real
+  directory rather than via the cache, so cache pruning is safe.
+
+### Migration
+
+- Existing installs whose `.skillpod/skills/<name>/` is a legacy symlink
+  are upgraded to a real-directory copy on the next `install`, `sync`, or
+  `add -g` run — no manual intervention required.
+
 ## [0.5.3] — 2026-04-28
 
 ### Changed

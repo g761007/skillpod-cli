@@ -179,8 +179,10 @@ def test_source_mode_adds_source_and_installs_selected(
     assert "name: docx" in manifest
     assert "xlsx" not in manifest
 
-    assert (proj / ".skillpod" / "skills" / "pdf").is_symlink()
-    assert (proj / ".skillpod" / "skills" / "docx").is_symlink()
+    pdf_root = proj / ".skillpod" / "skills" / "pdf"
+    docx_root = proj / ".skillpod" / "skills" / "docx"
+    assert pdf_root.is_dir() and not pdf_root.is_symlink()
+    assert docx_root.is_dir() and not docx_root.is_symlink()
     assert (proj / ".claude" / "skills" / "pdf").exists()
     assert (proj / ".claude" / "skills" / "docx").exists()
 
@@ -388,7 +390,8 @@ def test_source_mode_global_installs_with_fanout(
         ],
     )
     assert result.exit_code == 0, result.stdout + (result.stderr or "")
-    assert (fake_home / ".skillpod" / "skills" / "pdf").is_symlink()
+    global_root = fake_home / ".skillpod" / "skills" / "pdf"
+    assert global_root.is_dir() and not global_root.is_symlink()
     assert (fake_home / ".claude" / "skills" / "pdf").exists()
     # codex was not requested → no fan-out there.
     assert not (fake_home / ".codex" / "skills" / "pdf").exists()
@@ -430,3 +433,95 @@ def test_source_mode_global_unknown_agent_errors(
     assert result.exit_code == 1
     combined = (result.stdout + (result.stderr or "")).lower()
     assert "unknown agent" in combined or "supported" in combined
+
+
+# ---- Install-root durability (cache-prune resistance) ---------------------
+
+
+def test_global_install_survives_cache_prune(
+    runner: CliRunner,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``~/.skillpod/skills/<name>`` must remain readable after the
+    download cache is wiped. Regression for the global symlink-into-cache
+    bug — install root is now a real-directory copy."""
+    import shutil as _shutil
+
+    from tests._git_fixtures import make_skill_repo
+
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    monkeypatch.setenv("HOME", str(fake_home))
+
+    repo_path, _sha = make_skill_repo(
+        tmp_path / "git-side",
+        skill_name="audit",
+        skill_files={
+            "SKILL.md": (
+                "---\n"
+                "description: audit skill\n"
+                "---\n\n"
+                "# audit\n"
+            ),
+        },
+    )
+    result = runner.invoke(
+        app,
+        [
+            "add",
+            str(repo_path),
+            "-s",
+            "audit",
+            "-g",
+            "-a",
+            "claude",
+            "-y",
+        ],
+    )
+    assert result.exit_code == 0, result.stdout + (result.stderr or "")
+
+    install_root_dir = fake_home / ".skillpod" / "skills" / "audit"
+    fanout_link = fake_home / ".claude" / "skills" / "audit"
+    skill_md = install_root_dir / "SKILL.md"
+    fanout_skill_md = fanout_link / "SKILL.md"
+    assert install_root_dir.is_dir()
+    assert not install_root_dir.is_symlink()
+    assert "# audit" in skill_md.read_text(encoding="utf-8")
+
+    # Wipe the entire skillpod download cache.
+    import os
+    cache_dir = Path(os.environ["SKILLPOD_CACHE_DIR"])
+    _shutil.rmtree(cache_dir)
+
+    # Install root and fan-out target both still resolve to real content.
+    assert install_root_dir.is_dir()
+    assert "# audit" in skill_md.read_text(encoding="utf-8")
+    assert fanout_link.is_symlink()
+    assert "# audit" in fanout_skill_md.read_text(encoding="utf-8")
+
+
+def test_global_install_idempotent_when_content_matches(
+    runner: CliRunner,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Re-running ``skillpod add -g`` with the same source content must
+    succeed without ``--force`` (hash-based idempotency)."""
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    monkeypatch.setenv("HOME", str(fake_home))
+
+    pool = _make_local_skill_pool(tmp_path, names=["pdf"])
+    args = ["add", str(pool), "-s", "pdf", "-g", "-a", "claude", "-y"]
+    first = runner.invoke(app, args)
+    assert first.exit_code == 0, first.stdout + (first.stderr or "")
+
+    install_root_dir = fake_home / ".skillpod" / "skills" / "pdf"
+    manifest = install_root_dir / "SKILL.md"
+    mtime_before = manifest.stat().st_mtime_ns
+
+    second = runner.invoke(app, args)
+    assert second.exit_code == 0, second.stdout + (second.stderr or "")
+    # Idempotent skip: file untouched on second run.
+    assert manifest.stat().st_mtime_ns == mtime_before

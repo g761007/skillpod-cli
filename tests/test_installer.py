@@ -80,13 +80,16 @@ def test_local_skill_materialised_and_fanned_out(tmp_path: Path) -> None:
 
     assert [s.name for s in report.installed] == ["audit"]
     skill_link = proj / ".skillpod" / "skills" / "audit"
-    assert skill_link.is_symlink()
+    # Install root is a real-directory copy (not a symlink) so cache pruning
+    # cannot break it.
+    assert skill_link.is_dir()
+    assert not skill_link.is_symlink()
     assert (skill_link / "manifest.md").is_file()
 
     for agent in ("claude", "codex", "gemini"):
         link = proj / f".{agent}" / "skills" / "audit"
         assert link.is_symlink()
-        # All agents resolve through .skillpod/skills/audit -> the skill dir.
+        # All agents resolve through .skillpod/skills/audit -> the real skill dir.
         assert link.resolve() == skill_link.resolve()
 
 
@@ -184,8 +187,10 @@ def test_user_skill_installs_without_manifest_entry(tmp_path: Path) -> None:
 
     assert [s.name for s in report.installed] == ["audit"]
     installed = proj / ".skillpod" / "skills" / "audit"
-    assert installed.is_symlink()
-    assert installed.resolve() == user_skill.resolve()
+    assert installed.is_dir()
+    assert not installed.is_symlink()
+    # Content was copied from the user_skills override.
+    assert (installed / "manifest.md").read_text(encoding="utf-8") == "# local audit"
     assert (proj / ".claude" / "skills" / "audit").is_symlink()
 
 
@@ -217,7 +222,11 @@ def test_user_skills_shadows_same_name_source(tmp_path: Path) -> None:
     assert installed.resolved.source_kind == "local"
     assert installed.resolved.source_name is None
     assert installed.resolved.path == user_skill.resolve()
-    assert (proj / ".skillpod" / "skills" / "audit").resolve() == user_skill.resolve()
+    install_root = proj / ".skillpod" / "skills" / "audit"
+    assert install_root.is_dir()
+    assert not install_root.is_symlink()
+    # The materialised copy reflects the user_skills override content.
+    assert (install_root / "manifest.md").read_text(encoding="utf-8") == "# user audit"
 
 
 def test_group_lockfile_matches_flat_equivalent_manifest(tmp_path: Path) -> None:
@@ -492,7 +501,7 @@ def test_refuses_to_overwrite_unmanaged_directory(tmp_path: Path) -> None:
     # User content untouched + nothing materialised + no lockfile.
     assert (user_dir / "user-content.md").read_text() == "hands off"
     assert not (proj / "skillfile.lock").exists()
-    # Rollback removed the .skillpod/skills/audit symlink it had created.
+    # Rollback removed the .skillpod/skills/audit copy it had created.
     assert not (proj / ".skillpod" / "skills" / "audit").exists()
 
 
@@ -539,13 +548,15 @@ def test_uninstall_removes_links_only_for_target_skill(tmp_path: Path) -> None:
         """),
     )
     install(proj)
-    assert (proj / ".skillpod" / "skills" / "audit").is_symlink()
-    assert (proj / ".skillpod" / "skills" / "polish").is_symlink()
+    audit_root = proj / ".skillpod" / "skills" / "audit"
+    polish_root = proj / ".skillpod" / "skills" / "polish"
+    assert audit_root.is_dir() and not audit_root.is_symlink()
+    assert polish_root.is_dir() and not polish_root.is_symlink()
 
     uninstall(proj, "audit")
 
-    assert not (proj / ".skillpod" / "skills" / "audit").exists()
-    assert (proj / ".skillpod" / "skills" / "polish").is_symlink()
+    assert not audit_root.exists()
+    assert polish_root.is_dir() and not polish_root.is_symlink()
     for agent in ("claude", "codex"):
         assert not (proj / f".{agent}" / "skills" / "audit").exists()
         assert (proj / f".{agent}" / "skills" / "polish").is_symlink()
@@ -574,6 +585,132 @@ def test_repeated_install_is_idempotent(tmp_path: Path) -> None:
     install(proj)
     snapshot2 = sorted(p.relative_to(proj).as_posix() for p in proj.rglob("*"))
     assert snapshot == snapshot2
+
+
+# ---- Install-root durability (cache-prune resistance) ----------------------
+
+
+def test_install_root_survives_cache_prune(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Clearing ``~/.cache/skillpod`` after install must not break the
+    install root or agent fan-out. Regression for the symlink-into-cache
+    bug: ``.skillpod/skills/<name>`` is now a real-directory copy, so the
+    cache is purely a download buffer."""
+    import shutil as _shutil
+
+    repo_path, _sha = make_skill_repo(tmp_path / "git-side")
+    proj = _project(
+        tmp_path,
+        textwrap.dedent(f"""
+            version: 1
+            agents: [claude]
+            sources:
+              - name: anthropic
+                type: git
+                url: {repo_path}
+                ref: main
+            skills:
+              - name: audit
+                source: anthropic
+        """),
+    )
+
+    install(proj)
+
+    install_root_dir = proj / ".skillpod" / "skills" / "audit"
+    fanout_link = proj / ".claude" / "skills" / "audit"
+    manifest = install_root_dir / "manifest.md"
+    fanout_manifest = fanout_link / "manifest.md"
+    assert install_root_dir.is_dir()
+    assert not install_root_dir.is_symlink()
+    assert manifest.is_file()
+    assert fanout_manifest.is_file()
+
+    # Wipe the entire skillpod cache.
+    cache_dir = Path(os.environ["SKILLPOD_CACHE_DIR"])
+    _shutil.rmtree(cache_dir)
+
+    # Install root is content-bearing and must remain readable.
+    assert install_root_dir.is_dir()
+    assert manifest.read_text(encoding="utf-8") == "# audit\n"
+    # Fan-out symlink resolves into the real directory.
+    assert fanout_link.is_symlink()
+    assert fanout_manifest.read_text(encoding="utf-8") == "# audit\n"
+
+
+def test_install_root_legacy_symlink_is_replaced(
+    tmp_path: Path,
+) -> None:
+    """If a pre-existing ``.skillpod/skills/<name>`` is a symlink (e.g. from
+    an older version of skillpod that linked into the cache), running
+    install must replace it with a real-directory copy."""
+    skills_root = tmp_path / "pool"
+    (skills_root / "audit").mkdir(parents=True)
+    (skills_root / "audit" / "manifest.md").write_text("# audit", encoding="utf-8")
+
+    proj = _project(
+        tmp_path,
+        textwrap.dedent(f"""
+            version: 1
+            agents: [claude]
+            sources:
+              - name: local
+                type: local
+                path: {skills_root}
+            skills: [audit]
+        """),
+    )
+
+    # Pre-create a legacy symlink at the install-root path.
+    legacy_target = tmp_path / "legacy"
+    legacy_target.mkdir()
+    (legacy_target / "stale.md").write_text("# stale", encoding="utf-8")
+    install_root_dir = proj / ".skillpod" / "skills" / "audit"
+    install_root_dir.parent.mkdir(parents=True, exist_ok=True)
+    install_root_dir.symlink_to(legacy_target)
+    assert install_root_dir.is_symlink()
+
+    install(proj)
+
+    assert install_root_dir.is_dir()
+    assert not install_root_dir.is_symlink()
+    assert (install_root_dir / "manifest.md").read_text(encoding="utf-8") == "# audit"
+    # Stale content from the legacy target must not survive.
+    assert not (install_root_dir / "stale.md").exists()
+
+
+def test_repeated_install_skips_when_content_matches(
+    tmp_path: Path,
+) -> None:
+    """Hash-based idempotency: re-running install on a real-directory
+    install root with matching content must not re-write or fail."""
+    skills_root = tmp_path / "pool"
+    (skills_root / "audit").mkdir(parents=True)
+    (skills_root / "audit" / "manifest.md").write_text("# audit", encoding="utf-8")
+
+    proj = _project(
+        tmp_path,
+        textwrap.dedent(f"""
+            version: 1
+            agents: [claude]
+            sources:
+              - name: local
+                type: local
+                path: {skills_root}
+            skills: [audit]
+        """),
+    )
+
+    install(proj)
+    install_root_dir = proj / ".skillpod" / "skills" / "audit"
+    manifest = install_root_dir / "manifest.md"
+    mtime_before = manifest.stat().st_mtime_ns
+
+    # Second install: identical content → idempotent skip, no rewrite.
+    install(proj)
+    mtime_after = manifest.stat().st_mtime_ns
+    assert mtime_before == mtime_after
 
 
 # ---- Trust enforcement (Phase B) -------------------------------------------
