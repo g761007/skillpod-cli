@@ -141,17 +141,18 @@ def resolve_git(
 
     commit = explicit_commit or resolve_ref(source.url, source.ref)
     repo_root = populate_cache(source.url, commit)
-    skill_dir = repo_root / skill_name
+    lookup_root = repo_root / source.subpath if source.subpath else repo_root
+    skill_dir = lookup_root / skill_name
     if not skill_dir.is_dir():
-        # Root-is-skill fallback: a single-skill repo keeps SKILL.md at the
-        # repo root rather than inside a `<skill_name>/` subdirectory.
-        if (repo_root / "SKILL.md").is_file():
-            skill_dir = repo_root
+        # Root-is-skill fallback: a single-skill repo (or subpath pointing
+        # directly at a skill) keeps SKILL.md at the lookup root.
+        if (lookup_root / "SKILL.md").is_file():
+            skill_dir = lookup_root
         else:
             raise SourceError(
                 f"git source {source.name!r}: skill {skill_name!r} not present at "
                 f"{source.url}@{commit} (looked for {skill_dir} or "
-                f"{repo_root}/SKILL.md)"
+                f"{lookup_root}/SKILL.md)"
             )
 
     return ResolvedSkill(

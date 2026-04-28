@@ -80,6 +80,7 @@ class SourceEntry(_StrictModel):
     path: str | None = None  # local
     url: str | None = None  # git
     ref: str = "main"  # git
+    subpath: str | None = None  # git-only: subdirectory within the repo
     priority: int = 50
 
     @model_validator(mode="after")
@@ -89,6 +90,8 @@ class SourceEntry(_StrictModel):
                 raise ValueError(f"source '{self.name}': type=local requires `path:`")
             if self.url:
                 raise ValueError(f"source '{self.name}': type=local must not set `url:`")
+            if self.subpath:
+                raise ValueError(f"source '{self.name}': type=local must not set `subpath:`")
         else:  # git
             if not self.url:
                 raise ValueError(f"source '{self.name}': type=git requires `url:`")
