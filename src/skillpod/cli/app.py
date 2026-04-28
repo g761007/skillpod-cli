@@ -33,6 +33,9 @@ from skillpod.cli.commands import (
     remove as remove_cmd,
 )
 from skillpod.cli.commands import (
+    schema as schema_cmd,
+)
+from skillpod.cli.commands import (
     search as search_cmd,
 )
 from skillpod.cli.commands import (
@@ -241,6 +244,27 @@ def doctor(
         project_root=_project_root(manifest_path),
         manifest_path=manifest_path,
         json_output=json,
+    )
+
+
+@app.command("schema", help="Print or write the JSON Schema for skillfile.yml.")
+def schema_command(
+    output: Annotated[
+        Path | None,
+        typer.Option(
+            "--output",
+            "-o",
+            help="Write the schema to this path. Use '-' to write to stdout (JSON form).",
+        ),
+    ] = None,
+    json: JsonOpt = False,
+) -> None:
+    project_root = Path.cwd()
+    schema_cmd.run(
+        project_root=project_root,
+        output=output,
+        json_output=json or output is not None,
+        write=output is not None and str(output) != "-",
     )
 
 

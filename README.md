@@ -235,6 +235,14 @@ User-only skills (not committed to the manifest) live under
 `.skillpod/user_skills/` and take priority over project-declared skills
 with the same name.
 
+### JSON Schema
+
+`skillfile.yml` has a generated JSON Schema at
+[`schemas/skillfile.schema.json`](./schemas/skillfile.schema.json), produced
+from the pydantic manifest models. Reproduce it with
+`skillpod schema --output schemas/skillfile.schema.json`. VS Code and JetBrains
+IDEs can use this schema for autocomplete and validation.
+
 ---
 
 ## Commands

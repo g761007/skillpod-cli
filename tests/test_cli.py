@@ -1002,3 +1002,19 @@ def test_sync_unknown_agent_exits_1(
         ["sync", "--agent", "foobar", "--manifest", str(proj / "skillfile.yml")],
     )
     assert result.exit_code == 1
+
+
+def test_schema_command_writes_valid_json(runner: CliRunner, tmp_path: Path) -> None:
+    output = tmp_path / "out.json"
+
+    result = runner.invoke(app, ["schema", "--output", str(output)])
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert output.exists()
+    with output.open(encoding="utf-8") as handle:
+        schema = json.load(handle)
+    assert "$schema" in schema
+    assert "properties" in schema
+    assert "version" in schema["properties"]
+    assert "agents" in schema["properties"]
+    assert "skills" in schema["properties"]
