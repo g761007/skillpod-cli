@@ -382,7 +382,8 @@ skillpod global archive '*' --json
 | 0.5.2     | shipped     | `global archive` consolidates skills into `~/.skillpod/skills` |
 | 0.5.3     | shipped     | install root materialised as real-directory copy (cache-prune safe) |
 | 0.5.4     | shipped     | `skillpod add owner/repo` supports single-skill repos with `SKILL.md` at the root |
-| **0.5.5** | **current** | `skillpod add owner/repo` auto-detects the remote's default branch (no longer hardcodes `main`) |
+| 0.5.5     | shipped     | `skillpod add owner/repo` auto-detects the remote's default branch (no longer hardcodes `main`) |
+| **0.5.6** | **current** | browser tree URL subpath support; `global archive` batch/wildcard mode; global add no longer fans out |
 | 1.0.0     | planned     | schema freeze                                               |
 
 Full history: [`CHANGELOG.md`](./CHANGELOG.md).
