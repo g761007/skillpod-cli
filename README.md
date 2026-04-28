@@ -105,14 +105,15 @@ skills.sh           git repo               .skillpod/skills           agents
 
 ## `skillfile.yml`
 
-A real manifest looks like this (see [`examples/skillfile.yml`](./examples/skillfile.yml)):
+A real manifest looks like this (see [`examples/skillfile.yml`](./examples/skillfile.yml)
+for a fully-annotated reference):
 
 ```yaml
 version: 1
 
 registry:
   default: skills.sh
-  skills.sh:
+  skills_sh:
     allow_unverified: false
     min_installs: 1000
     min_stars: 50
@@ -149,9 +150,90 @@ use:
   - frontend
 ```
 
+### Field reference
+
+The minimal valid manifest is `version: 1` plus at least one source of
+skills (`skills:`, `groups:`+`use:`, or a directory under
+`.skillpod/user_skills/`). Every other field has a deterministic default.
+
+#### Top-level
+
+| Field      | Required | Type                    | Default      | Notes                                                                 |
+| ---------- | -------- | ----------------------- | ------------ | --------------------------------------------------------------------- |
+| `version`  | **yes**  | int                     | —            | Schema version. Must be `1`.                                          |
+| `registry` | no       | mapping                 | see below    | Registry resolver configuration.                                      |
+| `agents`   | no       | list[str \| object]     | `[]`         | Targets for fan-out. Empty list disables fan-out.                     |
+| `install`  | no       | mapping                 | see below    | How fan-out entries are materialised.                                 |
+| `sources`  | no       | list[object]            | `[]`         | Additional skill sources beyond the registry.                         |
+| `skills`   | no       | list[str \| object]     | `[]`         | Skills to install (shorthand string or object form).                  |
+| `groups`   | no       | mapping[str → list]     | `{}`         | Named bundles of skill entries.                                       |
+| `use`      | no       | list[str]               | `[]`         | Group names whose members join the effective skill set.               |
+
+Unknown top-level keys are rejected — typos surface immediately.
+
+#### `registry`
+
+| Field                          | Required | Type | Default       |
+| ------------------------------ | -------- | ---- | ------------- |
+| `default`                      | no       | str  | `"skills.sh"` |
+| `skills_sh.allow_unverified`   | no       | bool | `false`       |
+| `skills_sh.min_installs`       | no       | int  | `0`           |
+| `skills_sh.min_stars`          | no       | int  | `0`           |
+
+#### `agents[]`
+
+Two accepted shapes:
+
+- Bare string: `- claude`
+- Object form:
+
+  | Field     | Required | Type | Default | Notes                                                          |
+  | --------- | -------- | ---- | ------- | -------------------------------------------------------------- |
+  | `name`    | **yes**  | str  | —       | One of `claude`, `codex`, `gemini`, `cursor`, `opencode`, `antigravity`. |
+  | `adapter` | no       | str  | `null`  | Dotted path to a custom adapter class.                          |
+
+#### `install`
+
+| Field        | Required | Type                                | Default     | Notes                                                       |
+| ------------ | -------- | ----------------------------------- | ----------- | ----------------------------------------------------------- |
+| `mode`       | no       | `symlink` \| `copy` \| `hardlink`   | `"symlink"` | Primary materialisation mode.                               |
+| `on_missing` | no       | `error` \| `skip`                   | `"error"`   | Behaviour when a declared skill cannot be resolved.         |
+| `fallback`   | no       | list of mode literals               | `["copy"]`  | Tried in order when `mode` fails (e.g. OS denies symlinks). |
+
+#### `sources[]`
+
+| Field      | Required                          | Type                | Default  | Notes                                                |
+| ---------- | --------------------------------- | ------------------- | -------- | ---------------------------------------------------- |
+| `name`     | **yes**                           | str                 | —        | Unique identifier referenced by `skills[].source`.   |
+| `type`     | **yes**                           | `local` \| `git`    | —        | Selects which of `path` / `url` is required.         |
+| `path`     | **yes** when `type: local`        | str                 | —        | Filesystem path. Forbidden when `type: git`.         |
+| `url`      | **yes** when `type: git`          | str                 | —        | Git URL. Forbidden when `type: local`.               |
+| `ref`      | no (only meaningful for `git`)    | str                 | `"main"` | Branch, tag, or commit-ish.                          |
+| `priority` | no                                | int                 | `50`     | Higher wins when shorthand names match in multiple sources. |
+
+#### `skills[]`
+
+Two accepted shapes:
+
+- Shorthand string: `- audit` (resolved against `sources` in priority order, then the registry)
+- Object form:
+
+  | Field     | Required | Type | Default | Notes                                                            |
+  | --------- | -------- | ---- | ------- | ---------------------------------------------------------------- |
+  | `name`    | **yes**  | str  | —       | Skill identifier.                                                |
+  | `source`  | no       | str  | `null`  | Must match a declared `sources[].name`.                          |
+  | `version` | no       | str  | `null`  | Commit-ish; resolved and pinned in `skillfile.lock` at install time. |
+
+#### `groups` and `use`
+
+`groups` is a mapping of group name → list of skill entries (same shorthand
+/ object forms as `skills`). `use` is a list of group names; every entry
+must reference a declared group. Group names must not collide with any
+name in `skills`.
+
 User-only skills (not committed to the manifest) live under
-`.skillpod/user_skills/` and take priority over project-declared skills with
-the same name.
+`.skillpod/user_skills/` and take priority over project-declared skills
+with the same name.
 
 ---
 

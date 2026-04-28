@@ -1,36 +1,108 @@
-# Example skillfile.yml — mirrors plans/skillpod-plan.md §3.1.
-# This file is illustrative; real projects typically pin only the agents
-# and skills they actually use.
+# skillfile.yml — full schema reference (v1)
+#
+# Every key is annotated with one of:
+#   [required]                  — must be present
+#   [optional, default: …]      — may be omitted; shown value is the default
+#   [conditional]               — required only when another field has a
+#                                 specific value (see comment)
+#
+# A truly minimal manifest only needs `version` and at least one of
+# `skills` / `groups`+`use` / `.skillpod/user_skills/<name>/`. Everything
+# else has deterministic defaults.
 
+# -------------------------------------------------------------------------
+# version  [required]   schema version, must be 1
+# -------------------------------------------------------------------------
 version: 1
 
+# -------------------------------------------------------------------------
+# registry  [optional]  registry-resolver configuration
+# -------------------------------------------------------------------------
 registry:
-  default: skills.sh
+  default: skills.sh          # [optional, default: "skills.sh"]
+  skills_sh:                  # [optional]  trust policy for skills.sh
+    allow_unverified: false   # [optional, default: false]
+    min_installs: 0           # [optional, default: 0]
+    min_stars: 0              # [optional, default: 0]
 
+# -------------------------------------------------------------------------
+# agents  [optional, default: []]
+#   Agents that receive symlink/copy/hardlink fan-out. An empty list means
+#   no fan-out happens (skills land only in .skillpod/skills/).
+#   Supported: claude, codex, gemini, cursor, opencode, antigravity.
+#
+#   Each entry may be a bare string OR an object form:
+#     - claude
+#     - { name: codex, adapter: my_module.MyAdapter }
+# -------------------------------------------------------------------------
 agents:
-  - claude
+  - claude                    # bare-string form
   - codex
   - gemini
+  - name: cursor              # object form
+    adapter: null             # [optional, default: null]  custom adapter
 
+# -------------------------------------------------------------------------
+# install  [optional]   how fan-out entries are materialised
+# -------------------------------------------------------------------------
 install:
-  mode: symlink         # 0.1.0 only supports symlink mode
-  on_missing: error     # abort instead of silently skipping unresolved skills
+  mode: symlink               # [optional, default: "symlink"]   symlink | copy | hardlink
+  on_missing: error           # [optional, default: "error"]     error | skip
+  fallback: [copy]            # [optional, default: ["copy"]]    tried when `mode` fails
 
+# -------------------------------------------------------------------------
+# sources  [optional, default: []]
+#   Extra resolution sources beyond the registry. Higher `priority` wins
+#   when shorthand skill names match in multiple sources.
+#
+#   - type: local  → requires `path`,  forbids `url`
+#   - type: git    → requires `url`,   forbids `path`,  `ref` defaults to "main"
+# -------------------------------------------------------------------------
 sources:
-  - name: local
-    type: local
-    path: ~/.agents/skills
-    priority: 100
+  - name: local               # [required]   unique identifier
+    type: local               # [required]   local | git
+    path: ~/.agents/skills    # [conditional, type=local]  filesystem path
+    priority: 100             # [optional, default: 50]
 
   - name: anthropic
     type: git
-    url: https://github.com/anthropics/skills
-    ref: main
+    url: https://github.com/anthropics/skills   # [conditional, type=git]
+    ref: main                 # [optional, default: "main"]   branch / tag / commit
     priority: 80
 
+# -------------------------------------------------------------------------
+# skills  [optional, default: []]
+#   Skills to install. Two equivalent forms:
+#     shorthand:  - audit
+#     object:     - { name: audit, source: anthropic, version: <commit-ish> }
+# -------------------------------------------------------------------------
 skills:
-  - audit                       # shorthand: resolved against priority order
+  - audit                     # shorthand: resolved via priority order
   - polish
 
-  - name: custom-skill          # full form: pinned to one explicit source
-    source: anthropic
+  - name: custom-skill        # [required]
+    source: anthropic         # [optional, default: null]   must match a sources[].name
+    version: null             # [optional, default: null]   commit-ish; resolved at install
+
+# -------------------------------------------------------------------------
+# groups  [optional, default: {}]
+#   Named bundles of skills. Each key is the group name; each value is a
+#   list of skill entries (same shorthand/object forms as `skills`).
+#   Group names must NOT collide with any name in `skills`.
+# -------------------------------------------------------------------------
+groups:
+  frontend:
+    - audit
+    - web-design
+  backend:
+    - polish
+    - name: custom-skill
+      source: anthropic
+
+# -------------------------------------------------------------------------
+# use  [optional, default: []]
+#   Group names whose members are added to the effective skill set at
+#   install time. Every entry must reference a key declared under `groups`.
+# -------------------------------------------------------------------------
+use:
+  - frontend
