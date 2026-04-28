@@ -1,0 +1,267 @@
+{
+  "$defs": {
+    "AgentEntry": {
+      "additionalProperties": false,
+      "description": "Normalised representation of one entry in the `agents:` list.\n\nThe manifest accepts two forms:\n- Bare string: ``claude``  (legacy, 0.1.0 compatible)\n- Object form: ``{name: claude, adapter: my_module.MyAdapter}``\n\nThe loader normalises both into this model before validation.",
+      "properties": {
+        "adapter": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Adapter"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "AgentEntry",
+      "type": "object"
+    },
+    "InstallPolicy": {
+      "additionalProperties": false,
+      "description": "`install:` block.\n\n``mode`` governs how fan-out entries are materialised:\n- ``symlink`` (default): create a symbolic link for each agent.\n- ``copy``: create an independent recursive directory copy.\n- ``hardlink``: create a tree of hardlinked files (same inode as source).\n\n``fallback`` lists modes to try when the primary mode fails (e.g. symlink\ndenied by OS).  The default ``[\"copy\"]`` ensures graceful degradation on\nhosts that cannot create symlinks.",
+      "properties": {
+        "fallback": {
+          "items": {
+            "enum": [
+              "symlink",
+              "copy",
+              "hardlink"
+            ],
+            "type": "string"
+          },
+          "title": "Fallback",
+          "type": "array"
+        },
+        "mode": {
+          "default": "symlink",
+          "enum": [
+            "symlink",
+            "copy",
+            "hardlink"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "on_missing": {
+          "default": "error",
+          "enum": [
+            "error",
+            "skip"
+          ],
+          "title": "On Missing",
+          "type": "string"
+        }
+      },
+      "title": "InstallPolicy",
+      "type": "object"
+    },
+    "RegistryConfig": {
+      "additionalProperties": false,
+      "description": "`registry:` block.",
+      "properties": {
+        "default": {
+          "default": "skills.sh",
+          "title": "Default",
+          "type": "string"
+        },
+        "skills_sh": {
+          "$ref": "#/$defs/RegistrySkillsShPolicy"
+        }
+      },
+      "title": "RegistryConfig",
+      "type": "object"
+    },
+    "RegistrySkillsShPolicy": {
+      "additionalProperties": false,
+      "description": "Trust-policy knobs for the skills.sh registry.\n\nNested under `RegistryConfig.skills_sh` (Roadmap 0.2.0,\n`add-skillpod-trust-and-search` \u00a71 / manifest spec).\n\nDefaults preserve the 0.1.0 behaviour: allow only verified skills with\nno install or star minimums.\n\nFields use ``strict=True`` so YAML string values such as ``\"yes\"`` or\n``\"1000\"`` are rejected with a clear validation error instead of being\nsilently coerced.",
+      "properties": {
+        "allow_unverified": {
+          "default": false,
+          "title": "Allow Unverified",
+          "type": "boolean"
+        },
+        "min_installs": {
+          "default": 0,
+          "title": "Min Installs",
+          "type": "integer"
+        },
+        "min_stars": {
+          "default": 0,
+          "title": "Min Stars",
+          "type": "integer"
+        }
+      },
+      "title": "RegistrySkillsShPolicy",
+      "type": "object"
+    },
+    "SkillEntry": {
+      "additionalProperties": false,
+      "description": "One entry under top-level `skills:`.\n\nAccepts shorthand strings via the loader's normaliser; the model itself\nis always the object form once loaded.",
+      "properties": {
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "SkillEntry",
+      "type": "object"
+    },
+    "SourceEntry": {
+      "additionalProperties": false,
+      "description": "One entry under top-level `sources:`.",
+      "properties": {
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Path"
+        },
+        "priority": {
+          "default": 50,
+          "title": "Priority",
+          "type": "integer"
+        },
+        "ref": {
+          "default": "main",
+          "title": "Ref",
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "local",
+            "git"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        }
+      },
+      "required": [
+        "name",
+        "type"
+      ],
+      "title": "SourceEntry",
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/g761007/skillpod-cli/schemas/skillfile.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "JSON Schema for skillfile.yml v1 (skillpod manifest format).",
+  "properties": {
+    "agents": {
+      "items": {
+        "$ref": "#/$defs/AgentEntry"
+      },
+      "title": "Agents",
+      "type": "array"
+    },
+    "groups": {
+      "additionalProperties": {
+        "items": {
+          "$ref": "#/$defs/SkillEntry"
+        },
+        "type": "array"
+      },
+      "title": "Groups",
+      "type": "object"
+    },
+    "install": {
+      "$ref": "#/$defs/InstallPolicy"
+    },
+    "registry": {
+      "$ref": "#/$defs/RegistryConfig"
+    },
+    "skills": {
+      "items": {
+        "$ref": "#/$defs/SkillEntry"
+      },
+      "title": "Skills",
+      "type": "array"
+    },
+    "sources": {
+      "items": {
+        "$ref": "#/$defs/SourceEntry"
+      },
+      "title": "Sources",
+      "type": "array"
+    },
+    "use": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Use",
+      "type": "array"
+    },
+    "version": {
+      "const": 1,
+      "default": 1,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "title": "Skillfile",
+  "type": "object"
+}

@@ -16,6 +16,9 @@ from skillpod.manifest.models import Skillfile
 _SCHEMA_URI = "https://json-schema.org/draft/2020-12/schema"
 _SCHEMA_ID = "https://github.com/g761007/skillpod-cli/schemas/skillfile.schema.json"
 _DESCRIPTION = "JSON Schema for skillfile.yml v1 (skillpod manifest format)."
+# The in-tree copy at src/skillpod/schemas/skillfile.schema.json is regenerated
+# at release time for importlib.resources consumers; runtime generation continues
+# to use Skillfile.model_json_schema() as the source of truth.
 
 
 def run(
