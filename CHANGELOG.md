@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`skillpod add owner/repo` now works for single-skill repositories
+  whose `SKILL.md` lives at the repo root.** Previously discovery named
+  the skill after the cache directory basename (e.g.
+  `repo@<commit>` — and therefore unstable across commits), and the git
+  resolver failed because it always probed `<repo_root>/<skill_name>/`
+  rather than treating the repo root itself as the skill. The CLI now
+  passes the URL-derived name (e.g. `repo` from `owner/repo`) into
+  discovery, and `resolve_git` falls back to `<repo_root>` when the
+  named subdir is absent but `<repo_root>/SKILL.md` exists.
+
 ### Changed
 
 - **Install root is now a real-directory copy, not a symlink into the

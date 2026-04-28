@@ -62,4 +62,35 @@ def make_skill_repo(
     return repo, sha
 
 
-__all__ = ["make_skill_repo"]
+def make_root_skill_repo(
+    parent: Path,
+    *,
+    repo_name: str = "single-skill",
+    skill_files: dict[str, str] | None = None,
+    branch: str = "main",
+) -> tuple[Path, str]:
+    """Create a single-commit git repo whose root *is* the skill.
+
+    The repo's top-level contains ``SKILL.md`` directly (no subdir),
+    matching the "owner/repo points at one skill" shape that
+    `skillpod add owner/repo` should treat as a single skill.
+    """
+    repo = parent / repo_name
+    repo.mkdir(parents=True)
+    _git(repo, "init", "-q", "-b", branch)
+
+    files = skill_files or {"SKILL.md": f"---\ndescription: {repo_name}\n---\n# {repo_name}\n"}
+    if "SKILL.md" not in files:
+        files = {"SKILL.md": f"---\ndescription: {repo_name}\n---\n# {repo_name}\n", **files}
+    for rel, content in files.items():
+        target = repo / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-q", "-m", f"add root skill {repo_name}")
+    sha = _git(repo, "rev-parse", "HEAD").strip()
+    return repo, sha
+
+
+__all__ = ["make_root_skill_repo", "make_skill_repo"]

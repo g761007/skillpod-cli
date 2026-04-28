@@ -501,6 +501,110 @@ def test_global_install_survives_cache_prune(
     assert "# audit" in fanout_skill_md.read_text(encoding="utf-8")
 
 
+# ---- Root-is-skill (single-skill repo) -----------------------------------
+
+
+def test_source_mode_root_is_skill_installs_under_derived_name(
+    runner: CliRunner, tmp_path: Path
+) -> None:
+    """`skillpod add <git source>` for a repo whose root *is* the skill
+    auto-installs a single skill named after the URL's derived name (e.g.
+    ``vibe`` from ``file:///.../vibe``), not the cache directory basename."""
+    from tests._git_fixtures import make_root_skill_repo
+
+    repo_path, _sha = make_root_skill_repo(tmp_path / "git-side", repo_name="vibe")
+    proj = _make_project(tmp_path)
+
+    result = runner.invoke(
+        app,
+        [
+            "add",
+            f"file://{repo_path}",
+            "-y",
+            "--manifest",
+            str(proj / "skillfile.yml"),
+        ],
+    )
+    assert result.exit_code == 0, result.stdout + (result.stderr or "")
+
+    install_root_dir = proj / ".skillpod" / "skills" / "vibe"
+    assert install_root_dir.is_dir() and not install_root_dir.is_symlink()
+    assert (install_root_dir / "SKILL.md").is_file()
+    assert (proj / ".claude" / "skills" / "vibe").exists()
+
+    manifest_text = (proj / "skillfile.yml").read_text(encoding="utf-8")
+    assert "name: vibe" in manifest_text
+    assert "type: git" in manifest_text
+    assert f"file://{repo_path}" in manifest_text
+
+
+def test_source_mode_root_is_skill_global_uses_derived_name(
+    runner: CliRunner,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Global mode for a root-is-skill git source materialises under the
+    derived name (no commit SHA leaking from the cache layout)."""
+    from tests._git_fixtures import make_root_skill_repo
+
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    monkeypatch.setenv("HOME", str(fake_home))
+
+    repo_path, _sha = make_root_skill_repo(tmp_path / "git-side", repo_name="vibe")
+
+    result = runner.invoke(
+        app,
+        [
+            "add",
+            f"file://{repo_path}",
+            "-g",
+            "-a",
+            "claude",
+            "-y",
+        ],
+    )
+    assert result.exit_code == 0, result.stdout + (result.stderr or "")
+
+    install_root_dir = fake_home / ".skillpod" / "skills" / "vibe"
+    assert install_root_dir.is_dir() and not install_root_dir.is_symlink()
+    assert (install_root_dir / "SKILL.md").is_file()
+    assert (fake_home / ".claude" / "skills" / "vibe").exists()
+
+
+def test_source_mode_root_is_skill_reinstall_via_install_succeeds(
+    runner: CliRunner, tmp_path: Path
+) -> None:
+    """After `add`, a follow-up `install` (which goes through the resolver
+    again with the manifest's logical skill name) must still resolve the
+    root-is-skill via the resolver fallback rather than re-failing."""
+    from tests._git_fixtures import make_root_skill_repo
+
+    repo_path, _sha = make_root_skill_repo(tmp_path / "git-side", repo_name="vibe")
+    proj = _make_project(tmp_path)
+
+    add_result = runner.invoke(
+        app,
+        [
+            "add",
+            f"file://{repo_path}",
+            "-y",
+            "--manifest",
+            str(proj / "skillfile.yml"),
+        ],
+    )
+    assert add_result.exit_code == 0, add_result.stdout + (add_result.stderr or "")
+
+    install_result = runner.invoke(
+        app,
+        ["install", "--manifest", str(proj / "skillfile.yml")],
+    )
+    assert install_result.exit_code == 0, install_result.stdout + (
+        install_result.stderr or ""
+    )
+    assert (proj / ".skillpod" / "skills" / "vibe" / "SKILL.md").is_file()
+
+
 def test_global_install_idempotent_when_content_matches(
     runner: CliRunner,
     tmp_path: Path,
