@@ -45,6 +45,16 @@ jobs:
       - name: Test
         run: uv run pytest -q
 
+      - name: Schema drift guard
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
+        run: |
+          uv run skillpod schema --output schemas/skillfile.schema.json
+          git diff --exit-code -- schemas/skillfile.schema.json || (
+            echo "::error::schemas/skillfile.schema.json is out of sync with src/skillpod/manifest/models.py."
+            echo "Run 'uv run skillpod schema --output schemas/skillfile.schema.json' locally and commit."
+            exit 1
+          )
+
       - name: Smoke-test CLI import
         run: uv run python -c "from skillpod.cli import app; print('cli imports OK')"
 
