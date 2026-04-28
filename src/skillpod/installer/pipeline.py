@@ -99,8 +99,17 @@ def install(
     *,
     manifest_path: Path | None = None,
     lockfile_path: Path | None = None,
+    agent_filter: list[str] | None = None,
 ) -> InstallReport:
-    """Run the full install pipeline against `project_root`."""
+    """Run the full install pipeline against `project_root`.
+
+    `agent_filter`, when provided, restricts fan-out to the named agents
+    (intersected with the manifest's `agents:` list). The manifest itself
+    is never mutated by this parameter — it only narrows which fan-out
+    targets get materialised in this run. Used by `skillpod add ... -a`
+    to limit a single install to a subset of agents without rewriting
+    the manifest's global `agents:` list.
+    """
 
     project_root = Path(project_root).resolve()
     default_manifest, default_lockfile = _project_paths(project_root)
@@ -163,11 +172,22 @@ def install(
         plan.append((resolved, locked_entry))
 
     # Phase 2 — materialise and fan out under a rollback guard.
+    if agent_filter is not None:
+        wanted = set(agent_filter)
+        active_agents = [a for a in manifest.agents if a.name in wanted]
+        unknown = sorted(wanted - {a.name for a in manifest.agents})
+        if unknown:
+            raise InstallUserError(
+                f"agent_filter references agents not in manifest: {', '.join(unknown)}"
+            )
+    else:
+        active_agents = list(manifest.agents)
+
     report = InstallReport(
         project_root=project_root,
         manifest_path=manifest_path,
         lockfile_path=lockfile_path,
-        fanned_out_to=[a.name for a in manifest.agents],
+        fanned_out_to=[a.name for a in active_agents],
     )
 
     install_mode = InstallMode(manifest.install.mode)
@@ -191,7 +211,7 @@ def install(
             # Snapshot source_dir mtimes for mutation detection.
             source_snapshot = _snapshot_source(skill_link)
 
-            for agent_entry in manifest.agents:
+            for agent_entry in active_agents:
                 adapter = get_adapter(agent_entry.name)
                 target_dir = agent_skill_dir(project_root, agent_entry.name, resolved.name)
                 materialise_fanout(

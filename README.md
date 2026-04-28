@@ -68,6 +68,37 @@ skillpod install
 skillpod list
 ```
 
+### Adding skills from a git source
+
+`skillpod add` also accepts a **source identifier** — a git URL, GitHub
+`owner/repo` shorthand, or local path — and discovers `SKILL.md` files
+inside it. The matching `sources:` entry is appended to `skillfile.yml`
+automatically; no hand-editing required.
+
+```bash
+# Preview the skills exposed by a repository
+skillpod add anthropics/skills -l
+
+# Install two skills from that source into the current project
+skillpod add anthropics/skills -s pdf -s docx -y
+
+# `*` selects every skill in the source
+skillpod add anthropics/skills -s '*' -y
+
+# Restrict fan-out to one declared agent (manifest agents stay untouched)
+skillpod add anthropics/skills -s pdf -a claude -y
+
+# Install globally to ~/.skillpod/skills/ and fan-out to ~/.<agent>/skills/
+skillpod add anthropics/skills -s pdf -g -a claude -y
+```
+
+Flags: `-s/--skill` selects one or more skills (`*` means all),
+`-a/--agent` filters target agents, `-l/--list` previews without
+installing, `-g/--global` swaps the project install for a user-wide
+one, `-y/--yes` skips interactive prompts and replaces existing global
+entries, `--ref` pins a git ref/branch/commit, `--source-name`
+overrides the auto-derived source name written to the manifest.
+
 After `skillpod install`, the same skill is reachable from every agent you
 declared:
 

@@ -1,0 +1,122 @@
+"""Parse a positional `add` argument into a source specification.
+
+The `skillpod add` command accepts either a bare skill name (legacy
+behaviour: resolved against declared sources or registry) or a source
+identifier (git URL / GitHub `owner/repo` shorthand / local path).
+
+`parse_source_spec(text)` returns a `SourceSpec` for source-shaped
+inputs and `None` for bare skill names — the CLI dispatches on that.
+"""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Literal
+
+_GITHUB_SHORTHAND = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
+
+
+@dataclass(frozen=True)
+class SourceSpec:
+    """Canonical form of a source identifier passed to `skillpod add`."""
+
+    kind: Literal["git", "local"]
+    url_or_path: str
+    derived_name: str
+    ref: str = "main"
+
+
+def _strip_dotgit(name: str) -> str:
+    return name[: -len(".git")] if name.endswith(".git") else name
+
+
+def _name_from_url(url: str) -> str:
+    """Last path segment of `url`, with any `.git` suffix removed."""
+    tail = url.rstrip("/").rsplit("/", 1)[-1]
+    if ":" in tail and "/" not in tail:
+        # SCP-style "git@github.com:org/repo.git" hits here only when the
+        # whole URL has no `/` — should not happen, but be defensive.
+        tail = tail.rsplit(":", 1)[-1]
+    return _strip_dotgit(tail) or "source"
+
+
+def parse_source_spec(text: str, *, ref: str = "main") -> SourceSpec | None:
+    """Return a SourceSpec if `text` looks like a source, else None.
+
+    Detection rules (first match wins):
+
+    1. `git@host:org/repo[.git]` — SCP-style SSH git URL
+    2. Contains `://` — full URL (https/http/ssh/git/file)
+    3. Ends with `.git` — bare git URL
+    4. Starts with `./`, `../`, `/`, `~` — filesystem path
+    5. Matches `^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$` — GitHub shorthand
+       (expanded to `https://github.com/<text>`)
+    6. Otherwise → bare skill name (returns None)
+    """
+    candidate = text.strip()
+    if not candidate:
+        return None
+
+    if candidate.startswith("git@"):
+        # SCP-style: git@github.com:org/repo[.git]
+        _, _, after_at = candidate.partition("@")
+        _, _, path = after_at.partition(":")
+        return SourceSpec(
+            kind="git",
+            url_or_path=candidate,
+            derived_name=_name_from_url(path) if path else _name_from_url(candidate),
+            ref=ref,
+        )
+
+    if "://" in candidate:
+        return SourceSpec(
+            kind="git",
+            url_or_path=candidate,
+            derived_name=_name_from_url(candidate),
+            ref=ref,
+        )
+
+    if candidate.endswith(".git"):
+        return SourceSpec(
+            kind="git",
+            url_or_path=candidate,
+            derived_name=_name_from_url(candidate),
+            ref=ref,
+        )
+
+    if candidate.startswith(("./", "../", "/", "~")):
+        expanded = str(Path(candidate).expanduser())
+        return SourceSpec(
+            kind="local",
+            url_or_path=expanded,
+            derived_name=_name_from_url(expanded),
+            ref=ref,
+        )
+
+    if _GITHUB_SHORTHAND.fullmatch(candidate):
+        url = f"https://github.com/{candidate}"
+        return SourceSpec(
+            kind="git",
+            url_or_path=url,
+            derived_name=_name_from_url(candidate),
+            ref=ref,
+        )
+
+    return None
+
+
+def derive_unique_name(base: str, existing: set[str]) -> str:
+    """Suffix `-2`, `-3`, ... onto `base` until the name is unique."""
+    if base not in existing:
+        return base
+    i = 2
+    while True:
+        candidate = f"{base}-{i}"
+        if candidate not in existing:
+            return candidate
+        i += 1
+
+
+__all__ = ["SourceSpec", "derive_unique_name", "parse_source_spec"]

@@ -112,9 +112,81 @@ def install(
     )
 
 
-@app.command(help="Add a skill to skillfile.yml and install it.")
+@app.command(
+    help=(
+        "Add skill(s) to skillfile.yml and install them. The positional argument "
+        "is either a bare skill name (legacy: resolved against declared sources / "
+        "registry) or a source identifier (git URL, owner/repo shorthand, or local "
+        "path). With a source, the matching `sources:` entry is auto-added."
+    ),
+)
 def add(
-    skill: Annotated[str, typer.Argument(help="Skill name to add.")],
+    target: Annotated[
+        str,
+        typer.Argument(
+            help="Skill name OR source (git URL / owner/repo / local path).",
+        ),
+    ],
+    skill: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--skill",
+            "-s",
+            help="Specific skill(s) to install from the source. Use '*' for all. Repeatable.",
+        ),
+    ] = None,
+    agent: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--agent",
+            "-a",
+            help=(
+                "Target agent(s). Repeatable. Project-mode: must be declared in the "
+                "manifest. Global-mode: defaults to all known agents."
+            ),
+        ),
+    ] = None,
+    list_only: Annotated[
+        bool,
+        typer.Option(
+            "--list",
+            "-l",
+            help="List skills available in the source without installing.",
+        ),
+    ] = False,
+    global_install: Annotated[
+        bool,
+        typer.Option(
+            "--global",
+            "-g",
+            help=(
+                "Install to ~/.skillpod/skills/ and fan-out to ~/.<agent>/skills/ "
+                "instead of the project."
+            ),
+        ),
+    ] = False,
+    yes: Annotated[
+        bool,
+        typer.Option(
+            "--yes",
+            "-y",
+            help="Skip interactive prompts and replace existing global entries.",
+        ),
+    ] = False,
+    ref: Annotated[
+        str,
+        typer.Option(
+            "--ref",
+            help="Git ref / branch / commit (default: main).",
+        ),
+    ] = "main",
+    source_name: Annotated[
+        str | None,
+        typer.Option(
+            "--source-name",
+            help="Override the auto-derived source name written to skillfile.yml.",
+        ),
+    ] = None,
     manifest: ManifestOpt = Path("skillfile.yml"),
     json: JsonOpt = False,
 ) -> None:
@@ -122,7 +194,14 @@ def add(
     add_cmd.run(
         project_root=_project_root(manifest_path),
         manifest_path=manifest_path,
-        skill_name=skill,
+        target=target,
+        skills=skill,
+        agents=agent,
+        list_only=list_only,
+        global_install=global_install,
+        yes=yes,
+        ref=ref,
+        source_name=source_name,
         json_output=json,
     )
 

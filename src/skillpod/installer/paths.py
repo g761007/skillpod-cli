@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 
 PROJECT_INSTALL_ROOT = ".skillpod/skills"
+GLOBAL_INSTALL_ROOT_REL = ".skillpod/skills"
 
 
 def project_skill_dir(project_root: Path, skill_name: str) -> Path:
@@ -20,6 +21,23 @@ def agent_skill_dir(project_root: Path, agent: str, skill_name: str) -> Path:
 
 def install_root(project_root: Path) -> Path:
     return project_root / PROJECT_INSTALL_ROOT
+
+
+def global_install_root(home: Path | None = None) -> Path:
+    """Return `~/.skillpod/skills/` (or `<home>/.skillpod/skills` for tests)."""
+    base = (home or Path.home()).expanduser()
+    return base / GLOBAL_INSTALL_ROOT_REL
+
+
+def global_skill_dir(skill_name: str, home: Path | None = None) -> Path:
+    """Return `~/.skillpod/skills/<skill_name>`."""
+    return global_install_root(home) / skill_name
+
+
+def global_agent_skill_dir(agent: str, skill_name: str, home: Path | None = None) -> Path:
+    """Return `~/.<agent>/skills/<skill_name>`."""
+    base = (home or Path.home()).expanduser()
+    return base / f".{agent}" / "skills" / skill_name
 
 
 def is_managed_fanout(link_path: Path, project_root: Path) -> bool:
@@ -51,8 +69,12 @@ def is_managed_fanout(link_path: Path, project_root: Path) -> bool:
 
 
 __all__ = [
+    "GLOBAL_INSTALL_ROOT_REL",
     "PROJECT_INSTALL_ROOT",
     "agent_skill_dir",
+    "global_agent_skill_dir",
+    "global_install_root",
+    "global_skill_dir",
     "install_root",
     "is_managed_fanout",
     "project_skill_dir",

@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `skillpod add` now accepts a **source identifier** (git URL, GitHub
+  `owner/repo` shorthand, or local path) in addition to a bare skill name.
+  The matching `sources:` entry is appended to `skillfile.yml` automatically
+  — no hand-editing required. Modeled after `npx skills add` from
+  vercel-labs/skills.
+- New `add` flags: `-s/--skill` (select skills from the source, repeatable,
+  `*` for all), `-a/--agent` (filter fan-out to a subset of declared agents),
+  `-l/--list` (preview skills in the source without installing), `-g/--global`
+  (install to `~/.skillpod/skills/` and fan-out to `~/.<agent>/skills/`),
+  `-y/--yes` (skip prompts, replace existing global entries), `--ref` (pin
+  git ref/branch/commit, default `main`), `--source-name` (override the
+  auto-derived source name).
+- `skillpod.sources.spec.parse_source_spec` recognises git URLs, SCP-style
+  SSH (`git@host:org/repo`), `.git` suffixes, local paths
+  (`./`, `../`, `/`, `~`) and GitHub `owner/repo` shorthand.
+- `skillpod.sources.discovery.discover_skills` walks a fetched source for
+  `SKILL.md` files (depth ≤ 2) and parses YAML frontmatter for
+  `description:`, with a graceful fallback for malformed frontmatter.
+- `skillpod.installer.global_install` materialises skills under
+  `~/.skillpod/skills/<name>` and fans them out to `~/.<agent>/skills/<name>`
+  for the agents you select.
+- `installer.install(...)` gains an optional `agent_filter` parameter that
+  restricts fan-out to a subset of manifest agents in a single run, without
+  mutating the manifest.
+
 ## [0.5.0] — 2026-04-27
 
 First public release on PyPI. Bundles every roadmap milestone shipped through
