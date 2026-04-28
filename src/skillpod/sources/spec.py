@@ -17,6 +17,16 @@ from typing import Literal
 
 _GITHUB_SHORTHAND = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
 
+# Matches browser-style tree URLs from GitHub/GitLab/Bitbucket:
+#   https://<host>/<owner>/<repo>/tree/<ref>[/<subpath>]
+#   https://<host>/<owner>/<repo>/-/tree/<ref>[/<subpath>]  (GitLab)
+_DEEP_URL = re.compile(
+    r"(https?://[^/?#\s]+/[^/?#\s]+/[^/?#\s]+)"
+    r"/(?:-/)?tree"
+    r"/([^/?#\s]+)"
+    r"(?:/(.+))?"
+)
+
 
 @dataclass(frozen=True)
 class SourceSpec:
@@ -26,12 +36,17 @@ class SourceSpec:
     then queries the remote's default branch (e.g. ``main`` or ``master``)
     and rewrites the spec with the concrete branch name before any caller
     persists it to ``skillfile.yml``.
+
+    ``subpath`` is set when the input was a browser tree URL pointing at a
+    subdirectory within the repo (e.g. ``/tree/main/skills/foo``).  The
+    installer uses it as the root for discovery instead of the repo root.
     """
 
     kind: Literal["git", "local"]
     url_or_path: str
     derived_name: str
     ref: str | None = None
+    subpath: str | None = None  # git-only: subdirectory within the cloned repo
 
 
 def _strip_dotgit(name: str) -> str:
@@ -46,6 +61,23 @@ def _name_from_url(url: str) -> str:
         # whole URL has no `/` — should not happen, but be defensive.
         tail = tail.rsplit(":", 1)[-1]
     return _strip_dotgit(tail) or "source"
+
+
+def _parse_deep_url(
+    text: str,
+) -> tuple[str, str, str | None, str] | None:
+    """Parse a browser tree URL into ``(clone_url, ref, subpath, derived_name)``.
+
+    Returns ``None`` when ``text`` is not a recognised tree URL.
+    """
+    m = _DEEP_URL.fullmatch(text.rstrip("/"))
+    if m is None:
+        return None
+    clone_url = _strip_dotgit(m.group(1))
+    ref = m.group(2)
+    subpath: str | None = m.group(3) or None
+    name = subpath.rsplit("/", 1)[-1] if subpath else _name_from_url(clone_url)
+    return clone_url, ref, subpath, name
 
 
 def parse_source_spec(text: str, *, ref: str | None = None) -> SourceSpec | None:
@@ -77,6 +109,17 @@ def parse_source_spec(text: str, *, ref: str | None = None) -> SourceSpec | None
         )
 
     if "://" in candidate:
+        deep = _parse_deep_url(candidate)
+        if deep is not None:
+            clone_url, tree_ref, subpath, name = deep
+            return SourceSpec(
+                kind="git",
+                url_or_path=clone_url,
+                derived_name=name,
+                # explicit --ref overrides the ref embedded in the tree URL
+                ref=ref if ref is not None else tree_ref,
+                subpath=subpath,
+            )
         return SourceSpec(
             kind="git",
             url_or_path=candidate,

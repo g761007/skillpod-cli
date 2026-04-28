@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`skillpod add` now accepts browser tree URLs pointing at a subdirectory
+  inside a repository.** URLs of the form
+  `https://github.com/<owner>/<repo>/tree/<ref>/<subpath>` (GitHub) and
+  `https://gitlab.com/<org>/<repo>/-/tree/<ref>/<subpath>` (GitLab) are
+  parsed automatically: the repo is cloned once, and the specified subpath
+  is used as the discovery root so only skills inside that directory are
+  visible and installed. The resolved `url`, `ref`, and `subpath` are
+  persisted in `skillfile.yml` for reproducible reinstalls. Passing
+  `--ref` overrides the ref embedded in the URL.
+- `SourceEntry` in `skillfile.yml` now supports an optional `subpath:` field
+  (git sources only) to record the subdirectory offset from the repo root.
+  Hand-authored manifests targeting a monorepo subdirectory can set this
+  field directly.
+- `SourceSpec` dataclass gains a `subpath` attribute; `sources.git.resolve_git`
+  and the global-install path both honour it when navigating to the skill
+  directory within a cloned repo.
+- All previously undocumented-but-working input forms are now documented in
+  the README: full GitHub/GitLab HTTPS URLs, SSH SCP-style (`git@…:…`),
+  `ssh://` URLs, and local paths.
+
 ### Changed
 
 - **Breaking:** `skillpod add <source> --global/-g` now installs only to

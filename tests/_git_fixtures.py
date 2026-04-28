@@ -93,4 +93,35 @@ def make_root_skill_repo(
     return repo, sha
 
 
-__all__ = ["make_root_skill_repo", "make_skill_repo"]
+def make_multi_skill_repo(
+    parent: Path,
+    *,
+    repo_name: str = "monorepo",
+    skills: list[str],
+    subdir: str = "skills",
+    branch: str = "main",
+) -> tuple[Path, str]:
+    """Create a repo containing multiple skills under ``<subdir>/<skill>/``.
+
+    Returns ``(repo_path, commit_sha)``.  The repo path can be passed as a
+    ``file://`` URL or a direct filesystem path.
+    """
+    repo = parent / repo_name
+    repo.mkdir(parents=True)
+    _git(repo, "init", "-q", "-b", branch)
+
+    for skill_name in skills:
+        skill_dir = repo / subdir / skill_name
+        skill_dir.mkdir(parents=True)
+        skill_dir.joinpath("SKILL.md").write_text(
+            f"---\ndescription: {skill_name}\n---\n# {skill_name}\n",
+            encoding="utf-8",
+        )
+
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-q", "-m", f"add {len(skills)} skills")
+    sha = _git(repo, "rev-parse", "HEAD").strip()
+    return repo, sha
+
+
+__all__ = ["make_multi_skill_repo", "make_root_skill_repo", "make_skill_repo"]

@@ -27,7 +27,7 @@ from skillpod.sources import (
     resolve_local,
     resolve_ref,
 )
-from tests._git_fixtures import make_root_skill_repo, make_skill_repo
+from tests._git_fixtures import make_multi_skill_repo, make_root_skill_repo, make_skill_repo
 
 
 @pytest.fixture(autouse=True)
@@ -51,6 +51,9 @@ def test_cache_root_honours_env(isolated_cache: Path) -> None:
     [
         ("https://github.com/example/skills", "github.com", "example/skills"),
         ("https://github.com/example/skills.git", "github.com", "example/skills"),
+        # Non-GitHub hosts — host must be preserved in cache path
+        ("https://gitlab.com/org/repo", "gitlab.com", "org/repo"),
+        ("https://bitbucket.org/team/project", "bitbucket.org", "team/project"),
         ("git@github.com:example/skills.git", "github.com", "example/skills"),
         ("ssh://git@github.com/example/skills.git", "github.com", "example/skills"),
         ("file:///tmp/skills.git", "", "tmp/skills"),
@@ -230,6 +233,77 @@ def test_resolve_git_no_fallback_when_no_skill_md_anywhere(tmp_path: Path) -> No
 
     with pytest.raises(SourceError, match="not present"):
         resolve_git("ghost", src)
+
+
+# ---- subpath support -------------------------------------------------------
+
+
+def test_resolve_git_honours_subpath(tmp_path: Path, isolated_cache: Path) -> None:
+    """resolve_git with source.subpath looks inside the specified subdirectory."""
+    repo_path, _ = make_multi_skill_repo(
+        tmp_path,
+        repo_name="monorepo",
+        skills=["web-design-guidelines", "api-patterns"],
+        subdir="skills",
+    )
+    src = SourceEntry(
+        name="monorepo",
+        type="git",
+        url=str(repo_path),
+        ref="main",
+        subpath="skills",
+    )
+
+    resolved = resolve_git("web-design-guidelines", src)
+
+    assert resolved.path.name == "web-design-guidelines"
+    assert (resolved.path / "SKILL.md").is_file()
+
+
+def test_resolve_git_subpath_pointing_at_single_skill(
+    tmp_path: Path, isolated_cache: Path
+) -> None:
+    """subpath that points directly at one skill dir triggers root-is-skill fallback."""
+    repo_path, _ = make_multi_skill_repo(
+        tmp_path,
+        repo_name="monorepo",
+        skills=["design"],
+        subdir="skills",
+    )
+    src = SourceEntry(
+        name="monorepo",
+        type="git",
+        url=str(repo_path),
+        ref="main",
+        subpath="skills/design",
+    )
+
+    resolved = resolve_git("design", src)
+
+    assert resolved.path.name == "design"
+    assert (resolved.path / "SKILL.md").is_file()
+
+
+def test_resolve_git_subpath_missing_raises(
+    tmp_path: Path, isolated_cache: Path
+) -> None:
+    """An invalid subpath must raise SourceError."""
+    repo_path, _ = make_multi_skill_repo(
+        tmp_path,
+        repo_name="monorepo",
+        skills=["design"],
+        subdir="skills",
+    )
+    src = SourceEntry(
+        name="monorepo",
+        type="git",
+        url=str(repo_path),
+        ref="main",
+        subpath="nonexistent-dir",
+    )
+
+    with pytest.raises(SourceError, match="not present"):
+        resolve_git("design", src)
 
 
 # ---- priority & explicit source --------------------------------------------

@@ -98,17 +98,18 @@ def install_global(
         assert spec.ref is not None  # narrowed by the branch above
         commit = resolve_ref(spec.url_or_path, spec.ref)
         repo_root = populate_cache(spec.url_or_path, commit)
+        source_root = repo_root / spec.subpath if spec.subpath else repo_root
     else:
         commit = ""
-        repo_root = Path(spec.url_or_path).expanduser().resolve()
-        if not repo_root.is_dir():
-            raise InstallSystemError(f"local source path does not exist: {repo_root}")
+        source_root = Path(spec.url_or_path).expanduser().resolve()
+        if not source_root.is_dir():
+            raise InstallSystemError(f"local source path does not exist: {source_root}")
 
     adapter = IdentityAdapter()
     report = GlobalInstallReport(spec=spec, install_root=install_root)
 
     for skill in selected:
-        skill_source_dir = repo_root if skill.rel_path == "." else repo_root / skill.rel_path
+        skill_source_dir = source_root if skill.rel_path == "." else source_root / skill.rel_path
         if not skill_source_dir.is_dir():
             raise InstallSystemError(
                 f"skill {skill.name!r}: directory missing in source ({skill_source_dir})"

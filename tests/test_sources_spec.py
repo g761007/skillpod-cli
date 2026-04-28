@@ -84,6 +84,94 @@ def test_parse_local_expands_user() -> None:
     assert "~" not in spec.url_or_path  # expanduser ran
 
 
+@pytest.mark.parametrize(
+    ("text", "expected_url", "expected_ref", "expected_subpath", "expected_name"),
+    [
+        # GitHub /tree/<ref>/<subpath>
+        (
+            "https://github.com/vercel-labs/agent-skills/tree/main/skills/web-design-guidelines",
+            "https://github.com/vercel-labs/agent-skills",
+            "main",
+            "skills/web-design-guidelines",
+            "web-design-guidelines",
+        ),
+        # multi-segment subpath
+        (
+            "https://github.com/owner/repo/tree/develop/a/b/c",
+            "https://github.com/owner/repo",
+            "develop",
+            "a/b/c",
+            "c",
+        ),
+        # GitLab /-/tree/
+        (
+            "https://gitlab.com/org/repo/-/tree/main/skills/foo",
+            "https://gitlab.com/org/repo",
+            "main",
+            "skills/foo",
+            "foo",
+        ),
+        # /tree/<ref> only — subpath is None, name falls back to repo
+        (
+            "https://github.com/owner/repo/tree/feature-branch",
+            "https://github.com/owner/repo",
+            "feature-branch",
+            None,
+            "repo",
+        ),
+        # trailing slash stripped
+        (
+            "https://github.com/owner/repo/tree/main/skills/foo/",
+            "https://github.com/owner/repo",
+            "main",
+            "skills/foo",
+            "foo",
+        ),
+        # .git suffix stripped from base URL
+        (
+            "https://github.com/owner/repo.git/tree/main/skills/foo",
+            "https://github.com/owner/repo",
+            "main",
+            "skills/foo",
+            "foo",
+        ),
+    ],
+)
+def test_parse_deep_tree_url(
+    text: str,
+    expected_url: str,
+    expected_ref: str,
+    expected_subpath: str | None,
+    expected_name: str,
+) -> None:
+    spec = parse_source_spec(text)
+    assert spec is not None, f"expected SourceSpec for {text!r}"
+    assert spec.kind == "git"
+    assert spec.url_or_path == expected_url
+    assert spec.ref == expected_ref
+    assert spec.subpath == expected_subpath
+    assert spec.derived_name == expected_name
+
+
+def test_deep_tree_url_explicit_ref_overrides_tree_ref() -> None:
+    """--ref overrides the ref embedded in a tree URL."""
+    spec = parse_source_spec(
+        "https://github.com/owner/repo/tree/main/skills/foo",
+        ref="v2.0.0",
+    )
+    assert spec is not None
+    assert spec.ref == "v2.0.0"
+    assert spec.subpath == "skills/foo"
+
+
+def test_plain_https_url_has_no_subpath() -> None:
+    """A plain https:// URL without /tree/ must not get a subpath."""
+    spec = parse_source_spec("https://github.com/anthropics/skills")
+    assert spec is not None
+    assert spec.subpath is None
+    assert spec.ref is None
+
+
 def test_derive_unique_name_no_collision() -> None:
     assert derive_unique_name("foo", set()) == "foo"
     assert derive_unique_name("foo", {"bar"}) == "foo"

@@ -28,6 +28,7 @@ from skillpod.installer import install
 from skillpod.installer.global_install import install_global
 from skillpod.manifest import load as load_manifest
 from skillpod.sources.discovery import DiscoveredSkill, discover_skills
+from skillpod.sources.errors import SourceError
 from skillpod.sources.git import populate_cache, resolve_default_branch, resolve_ref
 from skillpod.sources.spec import SourceSpec, derive_unique_name, parse_source_spec
 
@@ -120,7 +121,13 @@ def _fetch_source(spec: SourceSpec) -> tuple[SourceSpec, Path, str]:
             spec = replace(spec, ref=resolve_default_branch(spec.url_or_path))
         assert spec.ref is not None  # narrowed by the branch above
         commit = resolve_ref(spec.url_or_path, spec.ref)
-        root = populate_cache(spec.url_or_path, commit)
+        repo_root = populate_cache(spec.url_or_path, commit)
+        root = repo_root / spec.subpath if spec.subpath else repo_root
+        if spec.subpath and not root.is_dir():
+            raise SourceError(
+                f"subpath {spec.subpath!r} does not exist in "
+                f"{spec.url_or_path}@{commit}"
+            )
         return spec, root, commit
     root = Path(spec.url_or_path).expanduser().resolve()
     if not root.is_dir():
@@ -298,6 +305,8 @@ def _ensure_source_and_skills(
         if spec.kind == "git":
             new_source["url"] = spec.url_or_path
             new_source["ref"] = spec.ref
+            if spec.subpath is not None:
+                new_source["subpath"] = spec.subpath
         else:
             new_source["path"] = spec.url_or_path
         new_source["priority"] = 50
@@ -335,7 +344,7 @@ def _find_matching_source(sources_list: list[object], spec: SourceSpec) -> str |
             continue
         if entry.get("type") != spec.kind:
             continue
-        if spec.kind == "git" and entry.get("url") == spec.url_or_path:
+        if spec.kind == "git" and entry.get("url") == spec.url_or_path and entry.get("subpath") == spec.subpath:
             return entry.get("name") if isinstance(entry.get("name"), str) else None
         if spec.kind == "local" and entry.get("path") == spec.url_or_path:
             return entry.get("name") if isinstance(entry.get("name"), str) else None

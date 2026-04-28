@@ -7,6 +7,7 @@ import textwrap
 from pathlib import Path
 
 import pytest
+import yaml
 from typer.testing import CliRunner
 
 from skillpod.cli import app
@@ -685,3 +686,119 @@ def test_global_install_idempotent_when_content_matches(
     assert second.exit_code == 0, second.stdout + (second.stderr or "")
     # Idempotent skip: file untouched on second run.
     assert manifest.stat().st_mtime_ns == mtime_before
+
+
+# ---- subpath / deep-tree-URL support ---------------------------------------
+
+
+def test_deep_tree_url_installs_only_subpath_skill(
+    runner: CliRunner,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A tree URL pointing at a skill subdirectory installs only that skill.
+
+    The URL parser is bypassed (monkeypatched) so that all git operations run
+    against a real local repo — this tests the subpath materialisation path
+    without needing a live HTTPS remote.
+    """
+    from skillpod.sources.spec import SourceSpec
+    from tests._git_fixtures import make_multi_skill_repo
+
+    repo_path, _ = make_multi_skill_repo(
+        tmp_path / "git-side",
+        repo_name="monorepo",
+        skills=["web-design-guidelines", "api-patterns"],
+        subdir="skills",
+    )
+
+    # Simulate SourceSpec produced by parsing:
+    #   https://github.com/test-org/monorepo/tree/main/skills/web-design-guidelines
+    # but redirect git operations to the local repo.
+    fake_spec = SourceSpec(
+        kind="git",
+        url_or_path=str(repo_path),
+        derived_name="web-design-guidelines",
+        ref=None,
+        subpath="skills/web-design-guidelines",
+    )
+    monkeypatch.setattr(
+        "skillpod.cli.commands.add.parse_source_spec",
+        lambda text, ref=None: fake_spec,
+    )
+
+    proj = _make_project(tmp_path)
+    result = runner.invoke(
+        app,
+        [
+            "add",
+            "https://github.com/test-org/monorepo/tree/main/skills/web-design-guidelines",
+            "-y",
+            "--manifest",
+            str(proj / "skillfile.yml"),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+
+    # Only the targeted skill must be installed.
+    skill_dir = proj / ".skillpod" / "skills" / "web-design-guidelines"
+    assert skill_dir.is_dir()
+    assert (skill_dir / "SKILL.md").is_file()
+    assert not (proj / ".skillpod" / "skills" / "api-patterns").exists()
+
+    # skillfile.yml must record url + ref + subpath.
+    data = yaml.safe_load((proj / "skillfile.yml").read_text(encoding="utf-8"))
+    src = next(s for s in data["sources"])
+    assert src["url"] == str(repo_path)
+    assert src["subpath"] == "skills/web-design-guidelines"
+
+
+def test_non_github_host_uses_correct_cache_path(
+    runner: CliRunner,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A GitLab-style URL produces a cache entry keyed under the correct host."""
+    import skillpod.sources.git as _git_mod
+    from tests._git_fixtures import make_skill_repo
+
+    repo_path, _ = make_skill_repo(
+        tmp_path / "git-side",
+        skill_name="audit",
+        skill_files={"SKILL.md": "---\ndescription: audit\n---\n# audit\n"},
+    )
+
+    fake_url = "https://gitlab.example.test/org/skills"
+    original_run = _git_mod._run_git
+
+    def _redirect(
+        *args: str, cwd: Path | None = None
+    ) -> str:
+        # Replace fake_url with the real local path in every git command.
+        redirected = tuple(str(repo_path) if a == fake_url else a for a in args)
+        return original_run(*redirected, cwd=cwd)
+
+    monkeypatch.setattr(_git_mod, "_run_git", _redirect)
+
+    proj = _make_project(tmp_path)
+    result = runner.invoke(
+        app,
+        [
+            "add",
+            fake_url,
+            "-y",
+            "--manifest",
+            str(proj / "skillfile.yml"),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+
+    # Cache path must use the gitlab.example.test host, not github.com.
+    # cache_path_for returns: cache_root / host / "org/repo@<sha>"
+    # → on disk: cache/gitlab.example.test/org/skills@<sha>/
+    cache_dir = tmp_path / "cache"
+    host_entries = list((cache_dir / "gitlab.example.test" / "org").glob("skills@*"))
+    assert host_entries, "expected cache entry under gitlab.example.test/org/"
+
+    # Skill must be installed with the correct structure.
+    assert (proj / ".skillpod" / "skills" / "audit" / "SKILL.md").is_file()

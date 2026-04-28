@@ -70,25 +70,58 @@ skillpod list
 
 ### Adding skills from a git source
 
-`skillpod add` also accepts a **source identifier** — a git URL, GitHub
-`owner/repo` shorthand, or local path — and discovers `SKILL.md` files
+`skillpod add` accepts a **source identifier** and discovers `SKILL.md` files
 inside it. The matching `sources:` entry is appended to `skillfile.yml`
 automatically; no hand-editing required.
 
+**Supported input formats:**
+
 ```bash
-# Preview the skills exposed by a repository
+# 1. GitHub shorthand — expands to https://github.com/<owner>/<repo>
+skillpod add vercel-labs/agent-skills -l
+
+# 2. Full GitHub URL
+skillpod add https://github.com/vercel-labs/agent-skills -l
+
+# 3. Browser tree URL — installs only the targeted subdirectory as the source root
+#    Works for GitHub (/tree/) and GitLab (/-/tree/)
+skillpod add https://github.com/vercel-labs/agent-skills/tree/main/skills/web-design-guidelines -y
+
+# 4. Any other git host (GitLab, Bitbucket, self-hosted, …)
+skillpod add https://gitlab.com/org/repo -l
+
+# 5. Any git URL — SSH SCP-style or full URL
+skillpod add git@github.com:vercel-labs/agent-skills.git -l
+skillpod add ssh://git@gitlab.com/org/repo.git -l
+
+# 6. Local directory
+skillpod add ./my-local-skills -l
+skillpod add ~/shared/skills -l
+```
+
+**`--ref` interaction:**
+- When no `--ref` is given, skillpod auto-detects the remote's default branch
+  (works with `main`, `master`, or any custom default).
+- A browser tree URL already encodes a ref (`/tree/<ref>/…`); `--ref` overrides it
+  when you need to pin a different branch or commit.
+- The resolved ref is written into `skillfile.yml` so reinstalls are reproducible.
+
+**Common install patterns:**
+
+```bash
+# Preview skills in a source without installing
 skillpod add anthropics/skills -l
 
-# Install two skills from that source into the current project
+# Install two specific skills
 skillpod add anthropics/skills -s pdf -s docx -y
 
-# `*` selects every skill in the source
+# Install every skill in the source
 skillpod add anthropics/skills -s '*' -y
 
-# Restrict fan-out to one declared agent (manifest agents stay untouched)
+# Restrict fan-out to one declared agent
 skillpod add anthropics/skills -s pdf -a claude -y
 
-# Install globally to ~/.skillpod/skills/ only
+# Install globally to ~/.skillpod/skills/
 skillpod add anthropics/skills -s pdf -g -y
 ```
 
