@@ -1,9 +1,16 @@
-# skillpod
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/g761007/skillpod-cli/main/docs/assets/logo-dark.svg">
+    <img src="https://raw.githubusercontent.com/g761007/skillpod-cli/main/docs/assets/logo.svg" alt="skillpod" width="420">
+  </picture>
+</p>
 
-[![CI](https://github.com/g761007/skillpod-cli/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/g761007/skillpod-cli/actions/workflows/ci.yml)
-[![PyPI](https://img.shields.io/pypi/v/skillpod.svg)](https://pypi.org/project/skillpod/)
-[![Python](https://img.shields.io/pypi/pyversions/skillpod.svg)](https://pypi.org/project/skillpod/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+<p align="center">
+  <a href="https://github.com/g761007/skillpod-cli/actions/workflows/ci.yml"><img src="https://github.com/g761007/skillpod-cli/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="https://pypi.org/project/skillpod/"><img src="https://img.shields.io/pypi/v/skillpod.svg" alt="PyPI"></a>
+  <a href="https://pypi.org/project/skillpod/"><img src="https://img.shields.io/pypi/pyversions/skillpod.svg" alt="Python"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+</p>
 
 > **Pod-style dependency manager for AI coding agent skills.**
 > One declarative manifest, multi-agent fan-out.

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" role="img" aria-label="skillpod mark">
+  <title>skillpod mark</title>
+  <g fill="none" stroke="#111418" stroke-width="20" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M80 40 C 50 40 50 90 50 110 C 50 130 30 120 20 120 C 30 120 50 110 50 130 C 50 150 50 200 80 200"/>
+    <path d="M160 40 C 190 40 190 90 190 110 C 190 130 210 120 220 120 C 210 120 190 110 190 130 C 190 150 190 200 160 200"/>
+  </g>
+  <circle cx="120" cy="120" r="20" fill="#D97706"/>
+</svg>

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 200" role="img" aria-label="skillpod"
+     fill="none" stroke="none">
+  <title>skillpod (dark)</title>
+  <g stroke="#FAFAF7" stroke-width="18" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M70 30 C 40 30 40 75 40 92 C 40 109 22 100 12 100 C 22 100 40 91 40 108 C 40 125 40 170 70 170"/>
+    <path d="M150 30 C 180 30 180 75 180 92 C 180 109 198 100 208 100 C 198 100 180 91 180 108 C 180 125 180 170 150 170"/>
+  </g>
+  <circle cx="110" cy="100" r="16" fill="#FBBF24"/>
+  <text x="260" y="132"
+        font-family="ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace"
+        font-size="100" font-weight="600" letter-spacing="-2"
+        fill="#FAFAF7">skill</text>
+  <circle cx="540" cy="100" r="14" fill="#FBBF24"/>
+  <text x="572" y="132"
+        font-family="ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace"
+        font-size="100" font-weight="600" letter-spacing="-2"
+        fill="#FAFAF7">pod</text>
+</svg>
