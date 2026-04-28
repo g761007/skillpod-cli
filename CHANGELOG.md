@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.4] — 2026-04-28
+
+### Fixed
+
+- **`skillpod add owner/repo` now works for single-skill repositories
+  whose `SKILL.md` lives at the repo root.** Previously discovery named
+  the skill after the cache directory basename (e.g.
+  `repo@<commit>` — and therefore unstable across commits), and the git
+  resolver failed because it always probed `<repo_root>/<skill_name>/`
+  rather than treating the repo root itself as the skill. The CLI now
+  passes the URL-derived name (e.g. `repo` from `owner/repo`) into
+  discovery, and `resolve_git` falls back to `<repo_root>` when the
+  named subdir is absent but `<repo_root>/SKILL.md` exists.
+
+### Changed
+
+- **Install root is now a real-directory copy, not a symlink into the
+  cache.** `.skillpod/skills/<name>/` (project) and
+  `~/.skillpod/skills/<name>/` (global) are materialised via
+  `shutil.copytree` from the source. Previously they were symlinks
+  pointing into `~/.cache/skillpod/<host>/<org>/<repo>@<commit>/`, which
+  meant clearing the cache (manually or by macOS housekeeping) silently
+  broke every installed skill.
+- Re-running `install` / `add -g` is hash-idempotent: when the install
+  root's content already matches the source, no rewrite happens. When
+  content differs, the install fails unless `--yes / -y` is passed
+  (matching the previous force semantics).
+- Agent fan-out (`.<agent>/skills/<name>`, `~/.<agent>/skills/<name>`)
+  continues to default to `symlink`. Targets now resolve to a real
+  directory rather than via the cache, so cache pruning is safe.
+
+### Migration
+
+- Existing installs whose `.skillpod/skills/<name>/` is a legacy symlink
+  are upgraded to a real-directory copy on the next `install`, `sync`, or
+  `add -g` run — no manual intervention required.
+
 ## [0.5.3] — 2026-04-28
 
 ### Changed
@@ -188,7 +225,8 @@ required to publish.
 - pytest suite covering manifest, lockfile, source resolution, installer,
   and CLI smoke tests.
 
-[Unreleased]: https://github.com/g761007/skillpod-cli/compare/v0.5.3...HEAD
+[Unreleased]: https://github.com/g761007/skillpod-cli/compare/v0.5.4...HEAD
+[0.5.4]: https://github.com/g761007/skillpod-cli/releases/tag/v0.5.4
 [0.5.3]: https://github.com/g761007/skillpod-cli/releases/tag/v0.5.3
 [0.5.2]: https://github.com/g761007/skillpod-cli/releases/tag/v0.5.2
 [0.5.1]: https://github.com/g761007/skillpod-cli/releases/tag/v0.5.1

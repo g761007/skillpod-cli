@@ -127,10 +127,16 @@ skills.sh           git repo               .skillpod/skills           agents
   filters out unverified or low-signal entries.
 - **Resolve** — every install pins a git commit + sha256 into `skillfile.lock`.
 - **Cache** — bare clones land in `~/.cache/skillpod/` and are reused across
-  projects.
+  projects. The cache is a download buffer; clearing it never breaks an
+  installed skill.
+- **Materialise** — `.skillpod/skills/<name>/` (project) and
+  `~/.skillpod/skills/<name>/` (global) are **real directories** copied
+  from the source. Re-running install is hash-idempotent.
 - **Fan out** — one entry per agent in `agents:`, materialised by an
   `Adapter` (default: identity). Mode is `symlink | copy | hardlink` with a
   configurable fallback chain for hosts that disallow the primary mode.
+  Default `symlink` fan-out points at the real install root, so cache
+  pruning is always safe.
 
 ---
 
@@ -227,7 +233,7 @@ Two accepted shapes:
 
 | Field        | Required | Type                                | Default     | Notes                                                       |
 | ------------ | -------- | ----------------------------------- | ----------- | ----------------------------------------------------------- |
-| `mode`       | no       | `symlink` \| `copy` \| `hardlink`   | `"symlink"` | Primary materialisation mode.                               |
+| `mode`       | no       | `symlink` \| `copy` \| `hardlink`   | `"symlink"` | Primary materialisation mode for **agent fan-out** (`.<agent>/skills/`). The install root `.skillpod/skills/<name>/` is always a real-directory copy. |
 | `on_missing` | no       | `error` \| `skip`                   | `"error"`   | Behaviour when a declared skill cannot be resolved.         |
 | `fallback`   | no       | list of mode literals               | `["copy"]`  | Tried in order when `mode` fails (e.g. OS denies symlinks). |
 
@@ -308,7 +314,9 @@ machine-readable output where it makes sense.
 | 0.4.0     | shipped     | adapter layer, copy/hardlink modes, per-agent `sync`        |
 | 0.5.0     | shipped     | first public PyPI release + packaging hardening             |
 | 0.5.1     | shipped     | source-mode `skillpod add`, schema drift guard              |
-| **0.5.2** | **current** | `global archive` consolidates skills into `~/.skillpod/skills` |
+| 0.5.2     | shipped     | `global archive` consolidates skills into `~/.skillpod/skills` |
+| 0.5.3     | shipped     | install root materialised as real-directory copy (cache-prune safe) |
+| **0.5.4** | **current** | `skillpod add owner/repo` supports single-skill repos with `SKILL.md` at the root |
 | 1.0.0     | planned     | schema freeze                                               |
 
 Full history: [`CHANGELOG.md`](./CHANGELOG.md).

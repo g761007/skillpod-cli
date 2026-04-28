@@ -16,6 +16,7 @@ from skillpod.installer.fanout import (
     create_install_root_symlink,
     create_managed_fanout_symlink,
     materialise_fanout,
+    materialise_install_root,
     rollback_on_failure,
 )
 from skillpod.installer.paths import (
@@ -54,7 +55,7 @@ __all__ = [
     "InstallUserError",
     "InstalledSkill",
     "agent_skill_dir",
-    "create_install_root_symlink",
+    "create_install_root_symlink",  # deprecated alias for materialise_install_root
     "create_managed_fanout_symlink",
     "discover_user_skills",
     "flatten",
@@ -63,6 +64,7 @@ __all__ = [
     "install_root",
     "is_managed_fanout",
     "materialise_fanout",
+    "materialise_install_root",
     "project_skill_dir",
     "register_adapter",
     "reset_registry",

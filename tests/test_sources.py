@@ -26,7 +26,7 @@ from skillpod.sources import (
     resolve_local,
     resolve_ref,
 )
-from tests._git_fixtures import make_skill_repo
+from tests._git_fixtures import make_root_skill_repo, make_skill_repo
 
 
 @pytest.fixture(autouse=True)
@@ -175,6 +175,40 @@ def test_git_skill_missing_in_repo(tmp_path: Path) -> None:
     src = SourceEntry(name="anthropic", type="git", url=str(repo_path), ref="main")
     with pytest.raises(SourceError, match="not present"):
         resolve_git("does-not-exist", src)
+
+
+def test_resolve_git_falls_back_to_root_when_repo_is_skill(tmp_path: Path) -> None:
+    """A repo whose root *is* the skill (top-level SKILL.md) resolves to
+    `repo_root` itself rather than failing on the missing subdir."""
+    repo_path, sha = make_root_skill_repo(tmp_path, repo_name="vibe")
+    src = SourceEntry(name="vibe", type="git", url=str(repo_path), ref="main")
+
+    resolved = resolve_git("vibe", src)
+
+    expected_cache = cache_path_for(str(repo_path), sha)
+    assert resolved.path == expected_cache.resolve()
+    assert (resolved.path / "SKILL.md").is_file()
+    assert resolved.commit == sha
+
+
+def test_resolve_git_root_fallback_works_for_any_skill_name(tmp_path: Path) -> None:
+    """When the repo root has SKILL.md, the fallback uses the root regardless
+    of the requested `skill_name` — manifests can store any logical name."""
+    repo_path, _sha = make_root_skill_repo(tmp_path, repo_name="single")
+    src = SourceEntry(name="single", type="git", url=str(repo_path), ref="main")
+
+    resolved = resolve_git("renamed-locally", src)
+
+    assert (resolved.path / "SKILL.md").is_file()
+
+
+def test_resolve_git_no_fallback_when_no_skill_md_anywhere(tmp_path: Path) -> None:
+    """If neither `<repo>/<name>/` nor `<repo>/SKILL.md` exists, still fail."""
+    repo_path, _sha = make_skill_repo(tmp_path, skill_name="audit")
+    src = SourceEntry(name="anthropic", type="git", url=str(repo_path), ref="main")
+
+    with pytest.raises(SourceError, match="not present"):
+        resolve_git("ghost", src)
 
 
 # ---- priority & explicit source --------------------------------------------

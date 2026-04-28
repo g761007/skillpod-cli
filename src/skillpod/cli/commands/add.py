@@ -535,7 +535,7 @@ def run(
     except FileNotFoundError as exc:
         raise fail(str(exc), code=1, json_output=json_output) from exc
 
-    discovered = discover_skills(root)
+    discovered = discover_skills(root, root_name=spec.derived_name)
 
     if list_only:
         _print_listing(spec, discovered, json_output=json_output)

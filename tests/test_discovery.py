@@ -70,6 +70,33 @@ def test_discover_treats_root_as_single_skill(tmp_path: Path) -> None:
     assert discovered[0].description == "Top-level"
 
 
+def test_discover_root_name_override_renames_root_skill(tmp_path: Path) -> None:
+    """Callers can rename the root-is-skill entry away from the dir basename."""
+    (tmp_path / "SKILL.md").write_text(
+        "---\ndescription: Root\n---\n\n# root\n",
+        encoding="utf-8",
+    )
+
+    discovered = discover_skills(tmp_path, root_name="my-skill")
+
+    assert len(discovered) == 1
+    assert discovered[0].name == "my-skill"
+    assert discovered[0].rel_path == "."
+
+
+def test_discover_root_name_only_renames_root(tmp_path: Path) -> None:
+    """`root_name` must not affect subdir-discovered skills."""
+    (tmp_path / "SKILL.md").write_text("# root\n", encoding="utf-8")
+    _write_skill(tmp_path / "skills", "audit")
+
+    discovered = discover_skills(tmp_path, root_name="my-skill")
+
+    by_name = {s.rel_path: s.name for s in discovered}
+    assert by_name["."] == "my-skill"
+    # subdir keeps its directory basename regardless of root_name
+    assert "audit" in by_name.values()
+
+
 def test_discover_skips_hidden_and_excluded(tmp_path: Path) -> None:
     _write_skill(tmp_path, "real")
     # These should be ignored:

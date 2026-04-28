@@ -61,8 +61,19 @@ def _read_frontmatter_description(skill_md: Path) -> str:
     return ""
 
 
-def discover_skills(root: Path) -> list[DiscoveredSkill]:
-    """Return every skill (directory containing SKILL.md) under `root`."""
+def discover_skills(
+    root: Path,
+    *,
+    root_name: str | None = None,
+) -> list[DiscoveredSkill]:
+    """Return every skill (directory containing SKILL.md) under `root`.
+
+    ``root_name`` overrides the discovered name when the root itself is a
+    skill (``rel_path == "."``). Callers that know a stable user-facing
+    name — e.g. ``parse_source_spec`` derives ``"repo"`` from
+    ``owner/repo`` — pass it here so the manifest entry doesn't inherit
+    the cache directory's basename (which contains the commit SHA).
+    """
     root = root.resolve()
     if not root.is_dir():
         return []
@@ -75,7 +86,7 @@ def discover_skills(root: Path) -> list[DiscoveredSkill]:
     if root_skill_md.is_file():
         found.append(
             DiscoveredSkill(
-                name=root.name,
+                name=root_name or root.name,
                 description=_read_frontmatter_description(root_skill_md),
                 rel_path=".",
             )
