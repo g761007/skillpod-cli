@@ -7,8 +7,7 @@ Two dispatch modes, decided by the positional argument:
 2. **source identifier** (git URL / ``owner/repo`` / local path): fetch
    the source, list its skills (``-l``) or install the selected subset
    either into the project (auto-adding a ``sources:`` entry to
-   ``skillfile.yml``) or into ``~/.skillpod/skills/`` with fan-out
-   (``-g``).
+   ``skillfile.yml``) or into ``~/.skillpod/skills/`` (``-g``).
 
 Atomicity for project-mode: snapshot the manifest text before mutation;
 if any subsequent step raises, restore the original text so the
@@ -26,12 +25,8 @@ import yaml
 
 from skillpod.cli._output import emit, fail, run_with_exit_codes
 from skillpod.installer import install
-from skillpod.installer.global_install import (
-    DEFAULT_GLOBAL_AGENTS,
-    install_global,
-)
+from skillpod.installer.global_install import install_global
 from skillpod.manifest import load as load_manifest
-from skillpod.manifest.models import SUPPORTED_AGENTS
 from skillpod.sources.discovery import DiscoveredSkill, discover_skills
 from skillpod.sources.git import populate_cache, resolve_default_branch, resolve_ref
 from skillpod.sources.spec import SourceSpec, derive_unique_name, parse_source_spec
@@ -429,19 +424,6 @@ def _run_source_project(
 # ---------------------------------------------------------------------------
 
 
-def _resolve_global_agents(agents: list[str] | None) -> list[str]:
-    """Validate `-a` for global mode; default to all known agents."""
-    if not agents:
-        return list(DEFAULT_GLOBAL_AGENTS)
-    unknown = [a for a in agents if a not in SUPPORTED_AGENTS]
-    if unknown:
-        raise ValueError(
-            f"unknown agent(s): {', '.join(unknown)} "
-            f"(supported: {', '.join(SUPPORTED_AGENTS)})"
-        )
-    return list(dict.fromkeys(agents))
-
-
 def _run_source_global(
     *,
     spec: SourceSpec,
@@ -450,16 +432,20 @@ def _run_source_global(
     yes: bool,
     json_output: bool,
 ) -> None:
-    try:
-        target_agents = _resolve_global_agents(agents)
-    except ValueError as exc:
-        raise fail(str(exc), code=1, json_output=json_output) from exc
+    if agents:
+        raise fail(
+            "--agent is not valid with --global; global add installs only to "
+            "~/.skillpod/skills/ and no longer links or fans out to agent "
+            "directories",
+            code=1,
+            json_output=json_output,
+        )
 
     report = run_with_exit_codes(
         lambda: install_global(
             spec,
             selected,
-            agents=target_agents,
+            agents=[],
             force=yes,
         ),
         json_output=json_output,
@@ -540,6 +526,14 @@ def run(
         return
 
     # ---- Source-mode -----------------------------------------------------
+    if global_install and agents:
+        raise fail(
+            "--agent is not valid with --global; global add installs only to "
+            "~/.skillpod/skills/ and no longer links or fans out to agent directories",
+            code=1,
+            json_output=json_output,
+        )
+
     try:
         spec, root, _commit = _fetch_source(spec)
     except FileNotFoundError as exc:

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** `skillpod add <source> --global/-g` now installs only to
+  `~/.skillpod/skills/<name>/` and no longer creates
+  `~/.<agent>/skills/<name>` fan-out entries. Passing `-a/--agent` with
+  `--global` now exits with an error; `-a/--agent` remains valid for
+  project-mode source installs.
+
 ## [0.5.5] — 2026-04-28
 
 ### Fixed

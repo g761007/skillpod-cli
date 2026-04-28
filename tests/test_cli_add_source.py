@@ -366,7 +366,7 @@ def test_source_mode_agent_filter_restricts_fanout(
 # ---- source-mode global install (-g) --------------------------------------
 
 
-def test_source_mode_global_installs_with_fanout(
+def test_source_mode_global_installs_without_fanout(
     runner: CliRunner,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -384,20 +384,20 @@ def test_source_mode_global_installs_with_fanout(
             "-s",
             "pdf",
             "-g",
-            "-a",
-            "claude",
             "-y",
+            "--json",
         ],
     )
     assert result.exit_code == 0, result.stdout + (result.stderr or "")
+    payload = json.loads(result.stdout)
+    assert payload["skills"][0]["fanned_out_to"] == []
     global_root = fake_home / ".skillpod" / "skills" / "pdf"
     assert global_root.is_dir() and not global_root.is_symlink()
-    assert (fake_home / ".claude" / "skills" / "pdf").exists()
-    # codex was not requested → no fan-out there.
+    assert not (fake_home / ".claude" / "skills" / "pdf").exists()
     assert not (fake_home / ".codex" / "skills" / "pdf").exists()
 
 
-def test_source_mode_global_default_fans_out_to_all_known_agents(
+def test_source_mode_global_default_does_not_fanout(
     runner: CliRunner,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -412,11 +412,12 @@ def test_source_mode_global_default_fans_out_to_all_known_agents(
         ["add", str(pool), "-s", "pdf", "-g", "-y"],
     )
     assert result.exit_code == 0, result.stdout + (result.stderr or "")
+    assert (fake_home / ".skillpod" / "skills" / "pdf").is_dir()
     for agent in ("claude", "codex", "gemini", "cursor", "opencode", "antigravity"):
-        assert (fake_home / f".{agent}" / "skills" / "pdf").exists(), agent
+        assert not (fake_home / f".{agent}" / "skills" / "pdf").exists(), agent
 
 
-def test_source_mode_global_unknown_agent_errors(
+def test_source_mode_global_rejects_agent_flag(
     runner: CliRunner,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -428,11 +429,12 @@ def test_source_mode_global_unknown_agent_errors(
     pool = _make_local_skill_pool(tmp_path, names=["pdf"])
     result = runner.invoke(
         app,
-        ["add", str(pool), "-s", "pdf", "-g", "-a", "nope", "-y"],
+        ["add", str(pool), "-s", "pdf", "-g", "-a", "claude", "-y"],
     )
     assert result.exit_code == 1
     combined = (result.stdout + (result.stderr or "")).lower()
-    assert "unknown agent" in combined or "supported" in combined
+    assert "no longer links" in combined or "fans out" in combined
+    assert not (fake_home / ".skillpod" / "skills" / "pdf").exists()
 
 
 # ---- Install-root durability (cache-prune resistance) ---------------------
@@ -474,17 +476,13 @@ def test_global_install_survives_cache_prune(
             "-s",
             "audit",
             "-g",
-            "-a",
-            "claude",
             "-y",
         ],
     )
     assert result.exit_code == 0, result.stdout + (result.stderr or "")
 
     install_root_dir = fake_home / ".skillpod" / "skills" / "audit"
-    fanout_link = fake_home / ".claude" / "skills" / "audit"
     skill_md = install_root_dir / "SKILL.md"
-    fanout_skill_md = fanout_link / "SKILL.md"
     assert install_root_dir.is_dir()
     assert not install_root_dir.is_symlink()
     assert "# audit" in skill_md.read_text(encoding="utf-8")
@@ -494,11 +492,9 @@ def test_global_install_survives_cache_prune(
     cache_dir = Path(os.environ["SKILLPOD_CACHE_DIR"])
     _shutil.rmtree(cache_dir)
 
-    # Install root and fan-out target both still resolve to real content.
+    # Install root still resolves to real content.
     assert install_root_dir.is_dir()
     assert "# audit" in skill_md.read_text(encoding="utf-8")
-    assert fanout_link.is_symlink()
-    assert "# audit" in fanout_skill_md.read_text(encoding="utf-8")
 
 
 # ---- Default-branch auto-detection ----------------------------------------
@@ -621,8 +617,6 @@ def test_source_mode_root_is_skill_global_uses_derived_name(
             "add",
             f"file://{repo_path}",
             "-g",
-            "-a",
-            "claude",
             "-y",
         ],
     )
@@ -631,7 +625,7 @@ def test_source_mode_root_is_skill_global_uses_derived_name(
     install_root_dir = fake_home / ".skillpod" / "skills" / "vibe"
     assert install_root_dir.is_dir() and not install_root_dir.is_symlink()
     assert (install_root_dir / "SKILL.md").is_file()
-    assert (fake_home / ".claude" / "skills" / "vibe").exists()
+    assert not (fake_home / ".claude" / "skills" / "vibe").exists()
 
 
 def test_source_mode_root_is_skill_reinstall_via_install_succeeds(
@@ -679,7 +673,7 @@ def test_global_install_idempotent_when_content_matches(
     monkeypatch.setenv("HOME", str(fake_home))
 
     pool = _make_local_skill_pool(tmp_path, names=["pdf"])
-    args = ["add", str(pool), "-s", "pdf", "-g", "-a", "claude", "-y"]
+    args = ["add", str(pool), "-s", "pdf", "-g", "-y"]
     first = runner.invoke(app, args)
     assert first.exit_code == 0, first.stdout + (first.stderr or "")
 
