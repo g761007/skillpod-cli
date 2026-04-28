@@ -142,7 +142,7 @@ def add(
             "-a",
             help=(
                 "Target agent(s). Repeatable. Project-mode: must be declared in the "
-                "manifest. Global-mode: defaults to all known agents."
+                "manifest. Not valid with --global."
             ),
         ),
     ] = None,
@@ -159,10 +159,7 @@ def add(
         typer.Option(
             "--global",
             "-g",
-            help=(
-                "Install to ~/.skillpod/skills/ and fan-out to ~/.<agent>/skills/ "
-                "instead of the project."
-            ),
+            help="Install to ~/.skillpod/skills/ instead of the project.",
         ),
     ] = False,
     yes: Annotated[
