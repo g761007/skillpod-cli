@@ -999,7 +999,7 @@ def test_global_archive_all_archives_unmanaged(
     (beta / "manifest.md").write_text("# beta", encoding="utf-8")
     monkeypatch.chdir(_archive_project(tmp_path))
 
-    result = runner.invoke(app, ["global", "archive", "--json"])
+    result = runner.invoke(app, ["global", "archive", "*", "--json"])
 
     assert result.exit_code == 0, result.stdout + result.stderr
     payload = json.loads(result.stdout)
@@ -1023,12 +1023,23 @@ def test_global_archive_all_skips_skillpod_managed(
     beta.symlink_to(beta_dest)
     monkeypatch.chdir(_archive_project(tmp_path))
 
-    result = runner.invoke(app, ["global", "archive", "--json"])
+    result = runner.invoke(app, ["global", "archive", "*", "--json"])
 
     assert result.exit_code == 0, result.stdout + result.stderr
     payload = json.loads(result.stdout)
     assert "alpha" in payload["archived"]
     assert "beta" in payload["skipped_managed"]
+
+
+def test_global_archive_no_args_shows_help(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(_archive_project(tmp_path))
+
+    result = runner.invoke(app, ["global", "archive"])
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert "Usage:" in result.stdout or "usage:" in result.stdout.lower()
 
 
 def test_global_archive_multi_skill_archives_named(
