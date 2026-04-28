@@ -20,12 +20,18 @@ _GITHUB_SHORTHAND = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
 
 @dataclass(frozen=True)
 class SourceSpec:
-    """Canonical form of a source identifier passed to `skillpod add`."""
+    """Canonical form of a source identifier passed to `skillpod add`.
+
+    ``ref`` is ``None`` when the user did not pass ``--ref``; the resolver
+    then queries the remote's default branch (e.g. ``main`` or ``master``)
+    and rewrites the spec with the concrete branch name before any caller
+    persists it to ``skillfile.yml``.
+    """
 
     kind: Literal["git", "local"]
     url_or_path: str
     derived_name: str
-    ref: str = "main"
+    ref: str | None = None
 
 
 def _strip_dotgit(name: str) -> str:
@@ -42,7 +48,7 @@ def _name_from_url(url: str) -> str:
     return _strip_dotgit(tail) or "source"
 
 
-def parse_source_spec(text: str, *, ref: str = "main") -> SourceSpec | None:
+def parse_source_spec(text: str, *, ref: str | None = None) -> SourceSpec | None:
     """Return a SourceSpec if `text` looks like a source, else None.
 
     Detection rules (first match wins):

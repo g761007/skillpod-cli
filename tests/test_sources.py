@@ -21,6 +21,7 @@ from skillpod.sources import (
     cache_root,
     parse_repo_url,
     populate_cache,
+    resolve_default_branch,
     resolve_from_sources,
     resolve_git,
     resolve_local,
@@ -168,6 +169,26 @@ def test_resolve_ref_unknown(tmp_path: Path) -> None:
     repo_path, _ = make_skill_repo(tmp_path)
     with pytest.raises(GitOperationError):
         resolve_ref(str(repo_path), "no-such-branch")
+
+
+def test_resolve_default_branch_main(tmp_path: Path) -> None:
+    """A repo whose default branch is `main` returns "main"."""
+    repo_path, _ = make_skill_repo(tmp_path, branch="main")
+    assert resolve_default_branch(str(repo_path)) == "main"
+
+
+def test_resolve_default_branch_master(tmp_path: Path) -> None:
+    """A repo whose default branch is `master` returns "master" — this is
+    the regression that broke `skillpod add owner/repo` for repositories
+    that never migrated off the historical default."""
+    repo_path, _ = make_skill_repo(tmp_path, branch="master")
+    assert resolve_default_branch(str(repo_path)) == "master"
+
+
+def test_resolve_default_branch_custom(tmp_path: Path) -> None:
+    """An arbitrary default-branch name is parsed correctly."""
+    repo_path, _ = make_skill_repo(tmp_path, branch="develop")
+    assert resolve_default_branch(str(repo_path)) == "develop"
 
 
 def test_git_skill_missing_in_repo(tmp_path: Path) -> None:

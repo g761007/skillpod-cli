@@ -19,7 +19,7 @@ import os
 import shutil
 from collections.abc import Iterable
 from contextlib import suppress
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from skillpod.installer.adapter import InstallMode
@@ -32,7 +32,7 @@ from skillpod.installer.paths import (
 )
 from skillpod.lockfile.integrity import hash_directory
 from skillpod.sources.discovery import DiscoveredSkill
-from skillpod.sources.git import populate_cache, resolve_ref
+from skillpod.sources.git import populate_cache, resolve_default_branch, resolve_ref
 from skillpod.sources.spec import SourceSpec
 from skillpod.sources.types import ResolvedSkill
 
@@ -93,6 +93,9 @@ def install_global(
     install_root.mkdir(parents=True, exist_ok=True)
 
     if spec.kind == "git":
+        if spec.ref is None:
+            spec = replace(spec, ref=resolve_default_branch(spec.url_or_path))
+        assert spec.ref is not None  # narrowed by the branch above
         commit = resolve_ref(spec.url_or_path, spec.ref)
         repo_root = populate_cache(spec.url_or_path, commit)
     else:

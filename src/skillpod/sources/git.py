@@ -25,6 +25,11 @@ from skillpod.sources.errors import GitOperationError, SourceError
 from skillpod.sources.types import ResolvedSkill
 
 _SHA1 = re.compile(r"^[0-9a-f]{40}$")
+# Defense-in-depth: refuse symref targets that look option-like or contain
+# path-traversal segments. A hostile remote can return arbitrary text in the
+# `ref:` line; while none of it is exploitable today (no shell, no filesystem
+# use of the ref name), validating early avoids future surprises.
+_SAFE_BRANCH = re.compile(r"^[A-Za-z0-9_./-]{1,255}$")
 
 
 def _run_git(*args: str, cwd: Path | None = None) -> str:
@@ -55,6 +60,30 @@ def resolve_ref(url: str, ref: str) -> str:
     if not _SHA1.fullmatch(sha):
         raise GitOperationError(f"git ls-remote returned no SHA for {ref!r} in {url!r}")
     return sha
+
+
+def resolve_default_branch(url: str) -> str:
+    """Return the remote's default branch name (e.g. ``"main"`` or ``"master"``).
+
+    Parses ``git ls-remote --symref <url> HEAD`` for the
+    ``ref: refs/heads/<name>\\tHEAD`` line. Raises :class:`GitOperationError`
+    when the remote has a detached HEAD or the symref line is absent.
+    """
+    output = _run_git("ls-remote", "--symref", url, "HEAD")
+    for line in output.splitlines():
+        if not line.startswith("ref: "):
+            continue
+        target = line[len("ref: ") :].split("\t", 1)[0].strip()
+        name = target[len("refs/heads/") :] if target.startswith("refs/heads/") else target
+        if name.startswith("-") or ".." in name or not _SAFE_BRANCH.fullmatch(name):
+            raise GitOperationError(
+                f"refusing suspicious default branch name {name!r} returned by {url!r}"
+            )
+        return name
+    raise GitOperationError(
+        f"could not determine default branch for {url!r} "
+        "(no symref in `git ls-remote --symref` output)"
+    )
 
 
 def populate_cache(url: str, commit: str) -> Path:
@@ -135,4 +164,4 @@ def resolve_git(
     )
 
 
-__all__ = ["populate_cache", "resolve_git", "resolve_ref"]
+__all__ = ["populate_cache", "resolve_default_branch", "resolve_git", "resolve_ref"]

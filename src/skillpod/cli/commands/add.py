@@ -18,6 +18,7 @@ manifest tracks the filesystem.
 from __future__ import annotations
 
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 import typer
@@ -32,7 +33,7 @@ from skillpod.installer.global_install import (
 from skillpod.manifest import load as load_manifest
 from skillpod.manifest.models import SUPPORTED_AGENTS
 from skillpod.sources.discovery import DiscoveredSkill, discover_skills
-from skillpod.sources.git import populate_cache, resolve_ref
+from skillpod.sources.git import populate_cache, resolve_default_branch, resolve_ref
 from skillpod.sources.spec import SourceSpec, derive_unique_name, parse_source_spec
 
 # ---------------------------------------------------------------------------
@@ -111,16 +112,25 @@ def _run_legacy_add(
 # ---------------------------------------------------------------------------
 
 
-def _fetch_source(spec: SourceSpec) -> tuple[Path, str]:
-    """Materialise the source on disk and return `(root, commit_or_empty)`."""
+def _fetch_source(spec: SourceSpec) -> tuple[SourceSpec, Path, str]:
+    """Materialise the source on disk and return ``(spec, root, commit_or_empty)``.
+
+    For git sources without an explicit ref (``spec.ref is None``), this
+    resolves the remote's default branch (e.g. ``main`` or ``master``) and
+    rewrites ``spec.ref`` with the concrete name so the caller persists a
+    reproducible value into ``skillfile.yml``.
+    """
     if spec.kind == "git":
+        if spec.ref is None:
+            spec = replace(spec, ref=resolve_default_branch(spec.url_or_path))
+        assert spec.ref is not None  # narrowed by the branch above
         commit = resolve_ref(spec.url_or_path, spec.ref)
         root = populate_cache(spec.url_or_path, commit)
-        return root, commit
+        return spec, root, commit
     root = Path(spec.url_or_path).expanduser().resolve()
     if not root.is_dir():
         raise FileNotFoundError(f"local source path does not exist: {root}")
-    return root, ""
+    return spec, root, ""
 
 
 def _select_skills(
@@ -500,7 +510,7 @@ def run(
     list_only: bool,
     global_install: bool,
     yes: bool,
-    ref: str,
+    ref: str | None,
     source_name: str | None,
     json_output: bool,
 ) -> None:
@@ -531,7 +541,7 @@ def run(
 
     # ---- Source-mode -----------------------------------------------------
     try:
-        root, _commit = _fetch_source(spec)
+        spec, root, _commit = _fetch_source(spec)
     except FileNotFoundError as exc:
         raise fail(str(exc), code=1, json_output=json_output) from exc
 
