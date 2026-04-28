@@ -238,12 +238,21 @@ def update(
 def doctor(
     manifest: ManifestOpt = Path("skillfile.yml"),
     json: JsonOpt = False,
+    schema_hints: Annotated[
+        bool,
+        typer.Option(
+            "--schema-hints",
+            "-s",
+            help="Also report which top-level skillfile.yml fields are explicit vs using defaults.",
+        ),
+    ] = False,
 ) -> None:
     manifest_path = manifest if manifest.is_absolute() else (Path.cwd() / manifest).resolve()
     doctor_cmd.run(
         project_root=_project_root(manifest_path),
         manifest_path=manifest_path,
         json_output=json,
+        schema_hints=schema_hints,
     )
 
 

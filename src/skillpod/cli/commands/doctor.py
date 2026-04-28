@@ -16,7 +16,9 @@ Exit codes:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TypedDict
+from typing import Any, TypedDict
+
+import yaml
 
 from skillpod.cli._output import emit, fail
 from skillpod.installer.expand import flatten
@@ -24,7 +26,7 @@ from skillpod.installer.paths import agent_skill_dir, install_root, is_managed_f
 from skillpod.installer.user_skills import discover_user_skills
 from skillpod.lockfile import io as lockfile_io
 from skillpod.manifest import load as load_manifest
-from skillpod.manifest.models import SkillEntry
+from skillpod.manifest.models import SkillEntry, Skillfile
 
 
 class Finding(TypedDict, total=False):
@@ -34,11 +36,85 @@ class Finding(TypedDict, total=False):
     path: str
 
 
+class SchemaHint(TypedDict):
+    field: str
+    explicit: bool
+    value_summary: str
+
+
+_SCHEMA_HINT_FIELDS = (
+    "version",
+    "registry",
+    "agents",
+    "install",
+    "sources",
+    "skills",
+    "groups",
+    "use",
+)
+
+
+def _truncate(text: str, *, limit: int = 100) -> str:
+    return text if len(text) <= limit else text[: limit - 3] + "..."
+
+
+def _summarize_value(value: Any) -> str:
+    if isinstance(value, list):
+        summary = f"list[len={len(value)}]"
+    elif isinstance(value, dict):
+        summary = f"dict[len={len(value)}]"
+    elif isinstance(value, (int, str, bool)) or value is None:
+        summary = repr(value)
+    else:
+        summary = repr(value)
+    return _truncate(summary)
+
+
+def _raw_top_level_mapping(manifest_path: Path, *, json_output: bool) -> dict[str, Any]:
+    try:
+        raw = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        raise fail(f"invalid YAML in {manifest_path}: {exc}", code=2, json_output=json_output) from exc
+    except OSError as exc:
+        raise fail(str(exc), code=2, json_output=json_output) from exc
+
+    if not isinstance(raw, dict):
+        return {}
+    return {key: value for key, value in raw.items() if isinstance(key, str)}
+
+
+def _schema_hints(manifest_path: Path, *, json_output: bool) -> list[SchemaHint]:
+    raw = _raw_top_level_mapping(manifest_path, json_output=json_output)
+    defaults = Skillfile().model_dump()
+    hints: list[SchemaHint] = []
+    for field in _SCHEMA_HINT_FIELDS:
+        explicit = field in raw
+        value = raw[field] if explicit else defaults[field]
+        hints.append(
+            {
+                "field": field,
+                "explicit": explicit,
+                "value_summary": _summarize_value(value),
+            }
+        )
+    return hints
+
+
+def _format_schema_hints(hints: list[SchemaHint]) -> str:
+    lines = ["Schema hints:"]
+    for hint in hints:
+        status = "explicit" if hint["explicit"] else "default"
+        line = f"  {status:<8} {hint['field']:<8} = {hint['value_summary']}"
+        lines.append(_truncate(line))
+    return "\n".join(lines)
+
+
 def run(
     *,
     project_root: Path,
     manifest_path: Path,
     json_output: bool,
+    schema_hints: bool = False,
 ) -> None:
     if not manifest_path.exists():
         raise fail(f"{manifest_path} not found", code=2, json_output=json_output)
@@ -159,6 +235,11 @@ def run(
     ok = not has_errors
 
     payload = {"ok": ok, "findings": list(findings)}
+    hints: list[SchemaHint] = []
+    if schema_hints:
+        hints = _schema_hints(manifest_path, json_output=json_output)
+        payload["schema_hints"] = hints
+
     if json_output:
         emit(payload, json_output=True)
         if not ok:
@@ -166,13 +247,18 @@ def run(
         return
 
     if not findings:
-        emit(payload, json_output=False, human="No findings. Project looks healthy.")
+        human = "No findings. Project looks healthy."
     else:
         lines: list[str] = []
         for f in findings:
             path_suffix = f" ({f['path']})" if f.get("path") else ""
             lines.append(f"[{f['severity'].upper()}] {f['code']}: {f['message']}{path_suffix}")
-        emit(payload, json_output=False, human="\n".join(lines))
+        human = "\n".join(lines)
+
+    if schema_hints:
+        human += "\n\n" + _format_schema_hints(hints)
+
+    emit(payload, json_output=False, human=human)
 
     if not ok:
         raise SystemExit(1)

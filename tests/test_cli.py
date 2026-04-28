@@ -771,6 +771,52 @@ def test_doctor_lockfile_drift(runner: CliRunner, tmp_path: Path) -> None:
     assert "error" in result.stdout.lower() or "lockfile" in result.stdout.lower()
 
 
+def test_doctor_schema_hints_flag_human_mode(
+    runner: CliRunner, tmp_path: Path
+) -> None:
+    proj = _project(tmp_path, "version: 1\nskills: []\n")
+    (proj / "skillfile.lock").write_text("version: 1\nresolved: {}\n", encoding="utf-8")
+
+    result = runner.invoke(
+        app,
+        ["doctor", "--schema-hints", "--manifest", str(proj / "skillfile.yml")],
+    )
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert "Schema hints:" in result.stdout
+    assert any(
+        "default" in line and "agents" in line
+        for line in result.stdout.splitlines()
+    )
+
+
+def test_doctor_schema_hints_flag_json_mode(
+    runner: CliRunner, tmp_path: Path
+) -> None:
+    proj = _project(tmp_path, "version: 1\nskills: []\n")
+    (proj / "skillfile.lock").write_text("version: 1\nresolved: {}\n", encoding="utf-8")
+
+    result = runner.invoke(
+        app,
+        [
+            "doctor",
+            "--schema-hints",
+            "--json",
+            "--manifest",
+            str(proj / "skillfile.yml"),
+        ],
+    )
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert isinstance(payload["schema_hints"], list)
+    assert payload["schema_hints"]
+    for item in payload["schema_hints"]:
+        assert set(item) == {"field", "explicit", "value_summary"}
+    version = next(item for item in payload["schema_hints"] if item["field"] == "version")
+    assert version["explicit"] is True
+
+
 # ---- global advisory --------------------------------------------------------
 
 
