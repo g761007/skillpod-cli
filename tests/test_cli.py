@@ -987,6 +987,93 @@ def test_global_archive_multi_agent_same_content(
     assert not codex_copy.exists()
 
 
+def test_global_archive_all_archives_unmanaged(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    alpha = tmp_path / ".claude" / "skills" / "alpha"
+    alpha.mkdir(parents=True)
+    (alpha / "manifest.md").write_text("# alpha", encoding="utf-8")
+    beta = tmp_path / ".claude" / "skills" / "beta"
+    beta.mkdir(parents=True)
+    (beta / "manifest.md").write_text("# beta", encoding="utf-8")
+    monkeypatch.chdir(_archive_project(tmp_path))
+
+    result = runner.invoke(app, ["global", "archive", "--json"])
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert "alpha" in payload["archived"]
+    assert "beta" in payload["archived"]
+    assert payload["skipped_managed"] == []
+
+
+def test_global_archive_all_skips_skillpod_managed(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    alpha = tmp_path / ".claude" / "skills" / "alpha"
+    alpha.mkdir(parents=True)
+    (alpha / "manifest.md").write_text("# alpha", encoding="utf-8")
+    beta_dest = tmp_path / ".skillpod" / "skills" / "beta"
+    beta_dest.mkdir(parents=True)
+    (beta_dest / "manifest.md").write_text("# beta", encoding="utf-8")
+    claude_dir = tmp_path / ".claude" / "skills"
+    beta = claude_dir / "beta"
+    beta.symlink_to(beta_dest)
+    monkeypatch.chdir(_archive_project(tmp_path))
+
+    result = runner.invoke(app, ["global", "archive", "--json"])
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert "alpha" in payload["archived"]
+    assert "beta" in payload["skipped_managed"]
+
+
+def test_global_archive_multi_skill_archives_named(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    for name in ("alpha", "beta", "gamma"):
+        d = tmp_path / ".claude" / "skills" / name
+        d.mkdir(parents=True)
+        (d / "manifest.md").write_text(f"# {name}", encoding="utf-8")
+    monkeypatch.chdir(_archive_project(tmp_path))
+
+    result = runner.invoke(app, ["global", "archive", "alpha", "beta", "--json"])
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert sorted(payload["archived"]) == ["alpha", "beta"]
+    assert "gamma" not in payload["archived"]
+    assert payload["skipped_managed"] == []
+    assert payload["failed"] == []
+
+
+def test_global_archive_multi_skill_skips_managed(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    alpha = tmp_path / ".claude" / "skills" / "alpha"
+    alpha.mkdir(parents=True)
+    (alpha / "manifest.md").write_text("# alpha", encoding="utf-8")
+    beta_dest = tmp_path / ".skillpod" / "skills" / "beta"
+    beta_dest.mkdir(parents=True)
+    (beta_dest / "manifest.md").write_text("# beta", encoding="utf-8")
+    (tmp_path / ".claude" / "skills").mkdir(parents=True, exist_ok=True)
+    (tmp_path / ".claude" / "skills" / "beta").symlink_to(beta_dest)
+    monkeypatch.chdir(_archive_project(tmp_path))
+
+    result = runner.invoke(app, ["global", "archive", "alpha", "beta", "--json"])
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["archived"] == ["alpha"]
+    assert payload["skipped_managed"] == ["beta"]
+    assert payload["failed"] == []
+
+
 def test_global_doctor_flags_duplicate(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

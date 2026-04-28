@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`skillpod global archive` now accepts zero or more skill names.**
+  - No arguments: archives every global skill found across all agent directories in one pass.
+  - Multiple arguments (e.g. `skillpod global archive alpha beta`): archives exactly those skills.
+  - Single argument: existing single-skill behaviour is preserved (immediate error on missing skill,
+    single-skill JSON payload).
+  - Skills already managed by skillpod (`~/.skillpod/skills/<name>` exists and every agent copy is
+    a symlink pointing there) are automatically skipped in all-archive and multi-archive modes and
+    reported as `skipped_managed` in the JSON output.
+
 - **`skillpod add` now accepts browser tree URLs pointing at a subdirectory
   inside a repository.** URLs of the form
   `https://github.com/<owner>/<repo>/tree/<ref>/<subpath>` (GitHub) and

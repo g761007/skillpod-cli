@@ -11,11 +11,16 @@ from __future__ import annotations
 import os
 import shutil
 from pathlib import Path
+from typing import cast
 
 from skillpod.cli._output import emit, fail
-from skillpod.cli.commands.global_list import scan_global_skills
+from skillpod.cli.commands.global_list import GlobalSkill, scan_global_skills
 from skillpod.installer.paths import global_install_root, global_skill_dir
 from skillpod.lockfile.integrity import hash_directory
+
+
+class _ArchiveError(Exception):
+    pass
 
 
 def _is_inside(path: Path, parent: Path) -> bool:
@@ -40,25 +45,27 @@ def _points_into(link: Path, target_dir: Path) -> bool:
     return leaf == target
 
 
-def run(
+def _is_skillpod_link_managed(skill_name: str, matches: list[Path]) -> bool:
+    """True when ~/.skillpod/skills/<name> exists and every agent copy points to it."""
+    dest = global_skill_dir(skill_name)
+    if not dest.is_dir():
+        return False
+    return all(_points_into(p, dest) for p in matches)
+
+
+def _archive_skill_core(
+    skill_name: str,
+    matches: list[Path],
     *,
     project_root: Path,
-    manifest_path: Path,
-    skill_name: str,
-    json_output: bool,
-    force: bool = False,
-) -> None:
-    matches = [Path(row["path"]) for row in scan_global_skills() if row["name"] == skill_name]
-    if not matches:
-        raise fail(f"global skill {skill_name!r} not found", code=1, json_output=json_output)
-
+    force: bool,
+) -> dict[str, object]:
+    """Archive one skill. Returns the result payload dict. Raises _ArchiveError on failure."""
     blocked = [path for path in matches if _is_inside(path, project_root)]
     if blocked:
-        raise fail(
+        raise _ArchiveError(
             "refusing to archive project-local paths: "
-            + ", ".join(str(path) for path in blocked),
-            code=1,
-            json_output=json_output,
+            + ", ".join(str(path) for path in blocked)
         )
 
     dest = global_skill_dir(skill_name)
@@ -86,12 +93,10 @@ def run(
     if dest_exists:
         mismatches = [str(src) for src, h in source_hashes if h != dest_hash]
         if mismatches and not force:
-            raise fail(
+            raise _ArchiveError(
                 f"destination {dest} exists with different content than "
                 + ", ".join(mismatches)
-                + "; pass --force to overwrite",
-                code=1,
-                json_output=json_output,
+                + "; pass --force to overwrite"
             )
         if mismatches and force:
             chosen, _ = source_hashes[0]
@@ -116,21 +121,17 @@ def run(
                 removed.append(str(src))
     else:
         if not source_hashes:
-            raise fail(
+            raise _ArchiveError(
                 f"global skill {skill_name!r} has no concrete content under any "
-                "agent directory (only stale symlinks); nothing to archive",
-                code=1,
-                json_output=json_output,
+                "agent directory (only stale symlinks); nothing to archive"
             )
         first_hash = source_hashes[0][1]
         diverged = [str(src) for src, h in source_hashes[1:] if h != first_hash]
         if diverged and not force:
             chosen = source_hashes[0][0]
-            raise fail(
+            raise _ArchiveError(
                 f"multiple agent copies of {skill_name!r} have different content; "
-                f"pass --force to use {chosen} (diverging: " + ", ".join(diverged) + ")",
-                code=1,
-                json_output=json_output,
+                f"pass --force to use {chosen} (diverging: " + ", ".join(diverged) + ")"
             )
         chosen, _ = source_hashes[0]
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -156,9 +157,20 @@ def run(
         "unlinked": unlinked,
         "skipped_existing": skipped_existing,
     }
+    return payload
+
+
+def _emit_single_archive_result(payload: dict[str, object], *, json_output: bool) -> None:
     if json_output:
         emit(payload, json_output=True)
         return
+
+    skill_name = str(payload["name"])
+    dest = str(payload["dest"])
+    moved_from = cast(list[str], payload["moved_from"])
+    removed = cast(list[str], payload["removed"])
+    unlinked = cast(list[str], payload["unlinked"])
+    skipped_existing = bool(payload["skipped_existing"])
 
     lines: list[str] = []
     if skipped_existing:
@@ -173,6 +185,90 @@ def run(
     if not lines:
         lines.append(f"Nothing to do for {skill_name!r}.")
     emit(payload, json_output=False, human="\n".join(lines))
+
+
+def _run_batch(
+    names: list[str],
+    all_rows: list[GlobalSkill],
+    *,
+    project_root: Path,
+    json_output: bool,
+    force: bool,
+    skip_managed: bool,
+) -> None:
+    """Archive a batch of skill names. When skip_managed is True, silently skip already-managed skills."""
+    archived: list[str] = []
+    skipped_managed: list[str] = []
+    failed: list[dict[str, str]] = []
+
+    for name in names:
+        matches = [Path(row["path"]) for row in all_rows if row["name"] == name]
+        if not matches:
+            failed.append({"name": name, "reason": "not found"})
+            continue
+        if skip_managed and _is_skillpod_link_managed(name, matches):
+            skipped_managed.append(name)
+            continue
+        try:
+            _archive_skill_core(name, matches, project_root=project_root, force=force)
+        except _ArchiveError as exc:
+            failed.append({"name": name, "reason": str(exc)})
+        else:
+            archived.append(name)
+
+    payload: dict[str, object] = {
+        "ok": not failed,
+        "archived": archived,
+        "skipped_managed": skipped_managed,
+        "failed": failed,
+    }
+    if json_output:
+        emit(payload, json_output=True)
+    else:
+        lines = [f"Archived: {name}" for name in archived]
+        lines.extend(f"Skipped (managed): {name}" for name in skipped_managed)
+        lines.extend(f"Failed {item['name']}: {item['reason']}" for item in failed)
+        lines.append(
+            f"Done. {len(archived)} archived, {len(skipped_managed)} skipped, "
+            f"{len(failed)} failed."
+        )
+        emit(payload, json_output=False, human="\n".join(lines))
+    if failed:
+        raise SystemExit(1)
+
+
+def run(
+    *,
+    project_root: Path,
+    manifest_path: Path,
+    skill_names: list[str],
+    json_output: bool,
+    force: bool = False,
+) -> None:
+    if len(skill_names) == 1:
+        skill_name = skill_names[0]
+        matches = [Path(row["path"]) for row in scan_global_skills() if row["name"] == skill_name]
+        if not matches:
+            raise fail(f"global skill {skill_name!r} not found", code=1, json_output=json_output)
+        try:
+            payload = _archive_skill_core(
+                skill_name,
+                matches,
+                project_root=project_root,
+                force=force,
+            )
+        except _ArchiveError as exc:
+            raise fail(str(exc), code=1, json_output=json_output) from exc
+        _emit_single_archive_result(payload, json_output=json_output)
+        return
+
+    all_rows = scan_global_skills()
+
+    if not skill_names:
+        names: list[str] = list(dict.fromkeys(row["name"] for row in all_rows))
+        _run_batch(names, all_rows, project_root=project_root, json_output=json_output, force=force, skip_managed=True)
+    else:
+        _run_batch(skill_names, all_rows, project_root=project_root, json_output=json_output, force=force, skip_managed=True)
 
 
 __all__ = ["run"]

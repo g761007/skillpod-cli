@@ -371,7 +371,12 @@ def global_list_cmd(
     help="Move matching global skills into ~/.skillpod/skills/<name> and clean up agent copies.",
 )
 def global_archive_cmd(
-    skill: Annotated[str, typer.Argument(help="Global skill name to archive.")],
+    skill: Annotated[
+        list[str] | None,
+        typer.Argument(
+            help="Skill name(s) to archive. Accepts multiple names. Omit to archive all global skills."
+        ),
+    ] = None,
     manifest: ManifestOpt = Path("skillfile.yml"),
     json: JsonOpt = False,
     force: Annotated[
@@ -387,7 +392,7 @@ def global_archive_cmd(
     global_archive.run(
         project_root=_project_root(manifest_path),
         manifest_path=manifest_path,
-        skill_name=skill,
+        skill_names=list(skill) if skill else [],
         json_output=json,
         force=force,
     )
