@@ -314,7 +314,8 @@ machine-readable output where it makes sense.
 | 0.4.0     | shipped     | adapter layer, copy/hardlink modes, per-agent `sync`        |
 | 0.5.0     | shipped     | first public PyPI release + packaging hardening             |
 | 0.5.1     | shipped     | source-mode `skillpod add`, schema drift guard              |
-| **0.5.2** | **current** | `global archive` consolidates skills into `~/.skillpod/skills` |
+| 0.5.2     | shipped     | `global archive` consolidates skills into `~/.skillpod/skills` |
+| **0.5.3** | **current** | install root materialised as real-directory copy (cache-prune safe) |
 | 1.0.0     | planned     | schema freeze                                               |
 
 Full history: [`CHANGELOG.md`](./CHANGELOG.md).
