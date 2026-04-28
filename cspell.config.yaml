@@ -1,0 +1,30 @@
+version: "0.2"
+language: en,en-GB
+# Project-specific identifiers and Commonwealth-English spellings. Keep
+# this list lowercase and alphabetically sorted.
+words:
+  - antigravity
+  - cspell
+  - hardlink
+  - hardlinked
+  - hardlinks
+  - materialisation
+  - materialise
+  - materialised
+  - mypy
+  - opencode
+  - openspec
+  - pyproject
+  - pytest
+  - ruff
+  - skillfile
+  - skillpod
+  - typer
+  - uv
+ignorePaths:
+  - "**/.git/**"
+  - "**/.venv/**"
+  - "**/dist/**"
+  - "**/.skillpod/**"
+  - "uv.lock"
+  - "**/*.lock"

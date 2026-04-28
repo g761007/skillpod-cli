@@ -1,14 +1,14 @@
 # manifest Specification
 
 ## Purpose
-TBD - created by archiving change add-skillpod-mvp-install. Update Purpose after archive.
+This specification defines the `skillfile.yml` v1 schema for skillpod manifests. It documents top-level keys, defaults, required versus optional fields, and validation rules so loaders, doctors, and tools can rely on a single source of truth. The schema is grounded in the shipped manifest model and should be updated when manifest behavior changes.
 ## Requirements
 ### Requirement: Manifest parsing and defaults
 
 The system SHALL parse `skillfile.yml` into a typed model containing the
 fields `version`, `registry`, `agents`, `install`, `sources`, and
 `skills`, applying deterministic defaults for any omitted top-level
-field.
+field, including `install.fallback` defaulting to `["copy"]`.
 
 The `registry.skills_sh` block SHALL accept the additional fields
 `allow_unverified` (bool, default `false`), `min_installs` (int, default
@@ -22,8 +22,8 @@ this change continue to load without modification.
   `version: 1` and `skills: [audit]`
 - **THEN** the loaded model SHALL set `registry.default` to `"skills.sh"`,
   `agents` to `[]`, `install.mode` to `"symlink"`, `install.on_missing`
-  to `"error"`, `sources` to `[]`, and SHALL set
-  `registry.skills_sh.allow_unverified` to `false`,
+  to `"error"`, `install.fallback` to `["copy"]`, `sources` to `[]`,
+  and SHALL set `registry.skills_sh.allow_unverified` to `false`,
   `registry.skills_sh.min_installs` to `0`, and
   `registry.skills_sh.min_stars` to `0`
 
@@ -145,3 +145,46 @@ and the registry when names collide.
   loader SHALL emit a warning that the user skill is shadowing the
   manifest entry
 
+### Requirement: Install policy fields
+
+The system SHALL accept an `install:` block with `mode` set to one of
+`symlink`, `copy`, or `hardlink` (default `symlink`), `on_missing` set to
+one of `error` or `skip` (default `error`), and `fallback` set to a list
+of install mode literals (default `["copy"]`).
+
+#### Scenario: Symlink mode with copy fallback
+
+- **GIVEN** a manifest with
+  `install: { mode: symlink, fallback: [copy] }`
+- **WHEN** symlink creation is denied by the OS
+- **THEN** the installer SHALL retry using copy before giving up
+
+#### Scenario: Reject unknown mode
+
+- **GIVEN** a manifest with
+  `install: { mode: rsync }`
+- **WHEN** the manifest is loaded
+- **THEN** loading SHALL fail naming the offending value
+
+### Requirement: Agent entry forms
+
+The system SHALL accept `agents[]` entries either as bare strings or as
+objects with `name` and optional `adapter` fields. The `adapter` field
+SHALL default to null when omitted and, when present, SHALL contain a
+dotted path to a custom Adapter class.
+
+#### Scenario: Bare-string agent entry
+
+- **GIVEN** a manifest with
+  `agents: [claude]`
+- **WHEN** the manifest is loaded
+- **THEN** the loaded agent entry SHALL have `name` equal to `"claude"`
+  and `adapter` unset
+
+#### Scenario: Agent entry with custom adapter
+
+- **GIVEN** a manifest with
+  `agents: [{ name: codex, adapter: my_pkg.MyAdapter }]`
+- **WHEN** the manifest is loaded
+- **THEN** the loaded agent entry SHALL have `adapter` equal to
+  `"my_pkg.MyAdapter"`
