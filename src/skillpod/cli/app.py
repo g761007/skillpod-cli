@@ -174,12 +174,12 @@ def add(
         ),
     ] = False,
     ref: Annotated[
-        str,
+        str | None,
         typer.Option(
             "--ref",
-            help="Git ref / branch / commit (default: main).",
+            help="Git ref / branch / commit (default: the remote's default branch).",
         ),
-    ] = "main",
+    ] = None,
     source_name: Annotated[
         str | None,
         typer.Option(

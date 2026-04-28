@@ -501,6 +501,68 @@ def test_global_install_survives_cache_prune(
     assert "# audit" in fanout_skill_md.read_text(encoding="utf-8")
 
 
+# ---- Default-branch auto-detection ----------------------------------------
+
+
+def test_source_mode_auto_detects_master_default_branch(
+    runner: CliRunner, tmp_path: Path
+) -> None:
+    """`skillpod add owner/repo` (no --ref) must succeed even when the
+    repository's default branch is `master`. Regression for the hardcoded
+    ``ref="main"`` default that broke `git ls-remote --exit-code <url> main`
+    on master-default repos like ``alchaincyf/huashu-design``."""
+    from tests._git_fixtures import make_root_skill_repo
+
+    repo_path, _sha = make_root_skill_repo(
+        tmp_path / "git-side", repo_name="huashu-design", branch="master"
+    )
+    proj = _make_project(tmp_path)
+
+    result = runner.invoke(
+        app,
+        [
+            "add",
+            f"file://{repo_path}",
+            "-y",
+            "--manifest",
+            str(proj / "skillfile.yml"),
+        ],
+    )
+    assert result.exit_code == 0, result.stdout + (result.stderr or "")
+
+    # The resolved branch name (master) is written back into the manifest.
+    manifest_text = (proj / "skillfile.yml").read_text(encoding="utf-8")
+    assert "ref: master" in manifest_text
+    assert (proj / ".skillpod" / "skills" / "huashu-design" / "SKILL.md").is_file()
+
+
+def test_source_mode_explicit_ref_is_respected(
+    runner: CliRunner, tmp_path: Path
+) -> None:
+    """An explicit ``--ref`` always wins over the auto-detect behaviour."""
+    from tests._git_fixtures import make_root_skill_repo
+
+    repo_path, _sha = make_root_skill_repo(
+        tmp_path / "git-side", repo_name="pinned", branch="develop"
+    )
+    proj = _make_project(tmp_path)
+
+    result = runner.invoke(
+        app,
+        [
+            "add",
+            f"file://{repo_path}",
+            "--ref",
+            "develop",
+            "-y",
+            "--manifest",
+            str(proj / "skillfile.yml"),
+        ],
+    )
+    assert result.exit_code == 0, result.stdout + (result.stderr or "")
+    assert "ref: develop" in (proj / "skillfile.yml").read_text(encoding="utf-8")
+
+
 # ---- Root-is-skill (single-skill repo) -----------------------------------
 
 

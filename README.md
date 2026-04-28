@@ -316,7 +316,8 @@ machine-readable output where it makes sense.
 | 0.5.1     | shipped     | source-mode `skillpod add`, schema drift guard              |
 | 0.5.2     | shipped     | `global archive` consolidates skills into `~/.skillpod/skills` |
 | 0.5.3     | shipped     | install root materialised as real-directory copy (cache-prune safe) |
-| **0.5.4** | **current** | `skillpod add owner/repo` supports single-skill repos with `SKILL.md` at the root |
+| 0.5.4     | shipped     | `skillpod add owner/repo` supports single-skill repos with `SKILL.md` at the root |
+| **0.5.5** | **current** | `skillpod add owner/repo` auto-detects the remote's default branch (no longer hardcodes `main`) |
 | 1.0.0     | planned     | schema freeze                                               |
 
 Full history: [`CHANGELOG.md`](./CHANGELOG.md).
