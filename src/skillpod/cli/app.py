@@ -369,11 +369,22 @@ def global_list_cmd(
     )
 
 
-@global_app.command("archive", help="Rename matching global skill directories.")
+@global_app.command(
+    "archive",
+    help="Move matching global skills into ~/.skillpod/skills/<name> and clean up agent copies.",
+)
 def global_archive_cmd(
     skill: Annotated[str, typer.Argument(help="Global skill name to archive.")],
     manifest: ManifestOpt = Path("skillfile.yml"),
     json: JsonOpt = False,
+    force: Annotated[
+        bool,
+        typer.Option(
+            "--force",
+            "-f",
+            help="Overwrite ~/.skillpod/skills/<name> when it exists with different content.",
+        ),
+    ] = False,
 ) -> None:
     manifest_path = manifest if manifest.is_absolute() else (Path.cwd() / manifest).resolve()
     global_archive.run(
@@ -381,6 +392,7 @@ def global_archive_cmd(
         manifest_path=manifest_path,
         skill_name=skill,
         json_output=json,
+        force=force,
     )
 
 

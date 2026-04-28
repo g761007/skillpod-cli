@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2] — 2026-04-28
+
+### Changed
+
+- `skillpod global archive <name>` now **moves** matching skills into
+  `~/.skillpod/skills/<name>/` and removes the agent-directory copies
+  (previously appended a `.archived-<timestamp>` suffix in place). When the
+  destination already exists with different content, archive aborts unless
+  `--force/-f` is passed; symlinks pointing at the destination are unlinked
+  in place.
+
 ## [0.5.1] — 2026-04-28
 
 ### Added
@@ -151,5 +162,7 @@ required to publish.
 - pytest suite covering manifest, lockfile, source resolution, installer,
   and CLI smoke tests.
 
-[Unreleased]: https://github.com/g761007/skillpod-cli/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/g761007/skillpod-cli/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/g761007/skillpod-cli/releases/tag/v0.5.2
+[0.5.1]: https://github.com/g761007/skillpod-cli/releases/tag/v0.5.1
 [0.5.0]: https://github.com/g761007/skillpod-cli/releases/tag/v0.5.0

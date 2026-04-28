@@ -290,7 +290,7 @@ IDEs can use this schema for autocomplete and validation.
 | `skillpod outdated`  | Show which locked skills have drifted from upstream                      |
 | `skillpod update`    | Re-resolve and refresh skills in the lockfile                            |
 | `skillpod doctor`    | Verify manifest / lockfile / symlink consistency                         |
-| `skillpod global`    | Inspect global agent skill directories (advisory only)                   |
+| `skillpod global`    | Inspect, consolidate, or audit global agent skill directories            |
 | `skillpod adapter`   | Inspect the active adapter registry                                      |
 
 `--help` on any subcommand shows full options. `--json` produces
@@ -306,7 +306,9 @@ machine-readable output where it makes sense.
 | 0.2.0     | shipped     | trust policy, `search`, `outdated`, `doctor`                |
 | 0.3.0     | shipped     | groups, user_skills, advisory `global` CLI                  |
 | 0.4.0     | shipped     | adapter layer, copy/hardlink modes, per-agent `sync`        |
-| **0.5.0** | **current** | first public PyPI release + packaging hardening             |
+| 0.5.0     | shipped     | first public PyPI release + packaging hardening             |
+| 0.5.1     | shipped     | source-mode `skillpod add`, schema drift guard              |
+| **0.5.2** | **current** | `global archive` consolidates skills into `~/.skillpod/skills` |
 | 1.0.0     | planned     | schema freeze                                               |
 
 Full history: [`CHANGELOG.md`](./CHANGELOG.md).

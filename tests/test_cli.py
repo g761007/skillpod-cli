@@ -838,25 +838,145 @@ def test_global_list_against_fake_home(
     assert all({"agent", "name", "path", "size_bytes", "mtime"} <= set(row) for row in payload)
 
 
-def test_global_archive_renames(
+def _archive_project(tmp_path: Path) -> Path:
+    proj = tmp_path / "project"
+    proj.mkdir()
+    (proj / "skillfile.yml").write_text("version: 1\nskills: []\n", encoding="utf-8")
+    return proj
+
+
+def test_global_archive_moves_to_skillpod_home(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
     skill_dir = tmp_path / ".claude" / "skills" / "audit"
     skill_dir.mkdir(parents=True)
     (skill_dir / "manifest.md").write_text("# audit", encoding="utf-8")
-    proj = tmp_path / "project"
-    proj.mkdir()
-    (proj / "skillfile.yml").write_text("version: 1\nskills: []\n", encoding="utf-8")
-    monkeypatch.chdir(proj)
+    monkeypatch.chdir(_archive_project(tmp_path))
+
+    result = runner.invoke(app, ["global", "archive", "audit", "--json"])
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    dest = tmp_path / ".skillpod" / "skills" / "audit"
+    assert payload["ok"] is True
+    assert payload["dest"] == str(dest)
+    assert payload["moved_from"] == [str(skill_dir)]
+    assert payload["skipped_existing"] is False
+    assert not skill_dir.exists()
+    assert (dest / "manifest.md").read_text(encoding="utf-8") == "# audit"
+    # No leftover archived-* renames in agent dir.
+    assert not list((tmp_path / ".claude" / "skills").glob("audit.archived-*"))
+
+
+def test_global_archive_idempotent_when_dest_matches(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    dest = tmp_path / ".skillpod" / "skills" / "audit"
+    dest.mkdir(parents=True)
+    (dest / "manifest.md").write_text("# audit", encoding="utf-8")
+    agent_copy = tmp_path / ".claude" / "skills" / "audit"
+    agent_copy.mkdir(parents=True)
+    (agent_copy / "manifest.md").write_text("# audit", encoding="utf-8")
+    monkeypatch.chdir(_archive_project(tmp_path))
+
+    result = runner.invoke(app, ["global", "archive", "audit", "--json"])
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["skipped_existing"] is True
+    assert payload["moved_from"] == []
+    assert payload["removed"] == [str(agent_copy)]
+    assert (dest / "manifest.md").read_text(encoding="utf-8") == "# audit"
+    assert not agent_copy.exists()
+
+
+def test_global_archive_conflict_without_force(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    dest = tmp_path / ".skillpod" / "skills" / "audit"
+    dest.mkdir(parents=True)
+    (dest / "manifest.md").write_text("# old", encoding="utf-8")
+    agent_copy = tmp_path / ".claude" / "skills" / "audit"
+    agent_copy.mkdir(parents=True)
+    (agent_copy / "manifest.md").write_text("# new", encoding="utf-8")
+    monkeypatch.chdir(_archive_project(tmp_path))
 
     result = runner.invoke(app, ["global", "archive", "audit"])
 
+    assert result.exit_code != 0
+    assert "different content" in (result.stdout + result.stderr)
+    assert (dest / "manifest.md").read_text(encoding="utf-8") == "# old"
+    assert (agent_copy / "manifest.md").read_text(encoding="utf-8") == "# new"
+
+
+def test_global_archive_force_overwrites(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    dest = tmp_path / ".skillpod" / "skills" / "audit"
+    dest.mkdir(parents=True)
+    (dest / "manifest.md").write_text("# old", encoding="utf-8")
+    agent_copy = tmp_path / ".claude" / "skills" / "audit"
+    agent_copy.mkdir(parents=True)
+    (agent_copy / "manifest.md").write_text("# new", encoding="utf-8")
+    monkeypatch.chdir(_archive_project(tmp_path))
+
+    result = runner.invoke(app, ["global", "archive", "audit", "--force", "--json"])
+
     assert result.exit_code == 0, result.stdout + result.stderr
-    assert not skill_dir.exists()
-    archived = list((tmp_path / ".claude" / "skills").glob("audit.archived-*"))
-    assert len(archived) == 1
-    assert (archived[0] / "manifest.md").read_text(encoding="utf-8") == "# audit"
+    assert (dest / "manifest.md").read_text(encoding="utf-8") == "# new"
+    assert not agent_copy.exists()
+
+
+def test_global_archive_unlinks_managed_symlink(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    dest = tmp_path / ".skillpod" / "skills" / "audit"
+    dest.mkdir(parents=True)
+    (dest / "manifest.md").write_text("# audit", encoding="utf-8")
+    claude_dir = tmp_path / ".claude" / "skills"
+    claude_dir.mkdir(parents=True)
+    link = claude_dir / "audit"
+    link.symlink_to(dest)
+    monkeypatch.chdir(_archive_project(tmp_path))
+
+    result = runner.invoke(app, ["global", "archive", "audit", "--json"])
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["unlinked"] == [str(link)]
+    assert payload["moved_from"] == []
+    assert payload["skipped_existing"] is True
+    assert (dest / "manifest.md").read_text(encoding="utf-8") == "# audit"
+    assert not link.exists() and not link.is_symlink()
+
+
+def test_global_archive_multi_agent_same_content(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    claude_copy = tmp_path / ".claude" / "skills" / "audit"
+    claude_copy.mkdir(parents=True)
+    (claude_copy / "manifest.md").write_text("# audit", encoding="utf-8")
+    codex_copy = tmp_path / ".codex" / "skills" / "audit"
+    codex_copy.mkdir(parents=True)
+    (codex_copy / "manifest.md").write_text("# audit", encoding="utf-8")
+    monkeypatch.chdir(_archive_project(tmp_path))
+
+    result = runner.invoke(app, ["global", "archive", "audit", "--json"])
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    dest = tmp_path / ".skillpod" / "skills" / "audit"
+    assert payload["moved_from"] == [str(claude_copy)]
+    assert payload["removed"] == [str(codex_copy)]
+    assert (dest / "manifest.md").read_text(encoding="utf-8") == "# audit"
+    assert not claude_copy.exists()
+    assert not codex_copy.exists()
 
 
 def test_global_doctor_flags_duplicate(
