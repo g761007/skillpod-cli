@@ -7,20 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] — 2026-04-28
+
 ### Added
 
 - `skillpod add` now accepts a **source identifier** (git URL, GitHub
-  `owner/repo` shorthand, or local path) in addition to a bare skill name.
-  The matching `sources:` entry is appended to `skillfile.yml` automatically
-  — no hand-editing required. Modeled after `npx skills add` from
-  vercel-labs/skills.
+  `owner/repo` shorthand, SCP-style SSH, `.git`, or local path) in addition
+  to a bare skill name. Source-shaped inputs trigger `SKILL.md` discovery
+  inside the source and append the matching `sources:` entry to
+  `skillfile.yml` automatically — no hand-editing required. Modeled after
+  `npx skills add` from vercel-labs/skills.
 - New `add` flags: `-s/--skill` (select skills from the source, repeatable,
-  `*` for all), `-a/--agent` (filter fan-out to a subset of declared agents),
-  `-l/--list` (preview skills in the source without installing), `-g/--global`
-  (install to `~/.skillpod/skills/` and fan-out to `~/.<agent>/skills/`),
-  `-y/--yes` (skip prompts, replace existing global entries), `--ref` (pin
-  git ref/branch/commit, default `main`), `--source-name` (override the
-  auto-derived source name).
+  `*` for all), `-a/--agent` (filter fan-out to a subset of declared agents,
+  repeatable), `-l/--list` (preview skills in the source without installing),
+  `-g/--global` (install to `~/.skillpod/skills/` and fan-out to
+  `~/.<agent>/skills/`), `-y/--yes` (skip prompts, replace existing global
+  entries), `--ref` (pin git ref/branch/commit, default `main`),
+  `--source-name` (override the auto-derived source name written to the
+  manifest).
 - `skillpod.sources.spec.parse_source_spec` recognises git URLs, SCP-style
   SSH (`git@host:org/repo`), `.git` suffixes, local paths
   (`./`, `../`, `/`, `~`) and GitHub `owner/repo` shorthand.
@@ -33,6 +37,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `installer.install(...)` gains an optional `agent_filter` parameter that
   restricts fan-out to a subset of manifest agents in a single run, without
   mutating the manifest.
+
+### Changed
+
+- Bare-name `skillpod add <skill>` now refuses source-only flags
+  (`-l`/`-s`/`-g`/`-a`/`--source-name`) with a clear error instead of
+  silently ignoring them.
 
 ## [0.5.0] — 2026-04-27
 
