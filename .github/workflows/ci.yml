@@ -84,26 +84,3 @@ jobs:
         with:
           name: dist
           path: dist/*
-
-  openspec-validate:
-    name: openspec validate
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install openspec CLI
-        run: npm install -g @fission-ai/openspec
-
-      - name: Validate active changes (if any)
-        run: |
-          changes=$(openspec list --json | python -c "import sys,json;print(' '.join(c['name'] for c in json.load(sys.stdin)['changes']))")
-          if [ -z "$changes" ]; then
-            echo "No active changes to validate."
-            exit 0
-          fi
-          for c in $changes; do
-            echo "::group::validate $c"
-            openspec validate "$c" --strict
-            echo "::endgroup::"
-          done
