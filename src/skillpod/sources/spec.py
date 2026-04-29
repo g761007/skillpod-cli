@@ -136,11 +136,20 @@ def parse_source_spec(text: str, *, ref: str | None = None) -> SourceSpec | None
         )
 
     if candidate.startswith(("./", "../", "/", "~")):
-        expanded = str(Path(candidate).expanduser())
+        expanded = str(Path(candidate).expanduser()) if candidate.startswith("~") else candidate
         return SourceSpec(
             kind="local",
             url_or_path=expanded,
-            derived_name=_name_from_url(expanded),
+            derived_name=Path(expanded).name or "source",
+            ref=ref,
+        )
+
+    # Windows absolute path: C:\... or C:/...
+    if len(candidate) >= 3 and candidate[1] == ":" and candidate[2] in "\\/":
+        return SourceSpec(
+            kind="local",
+            url_or_path=candidate,
+            derived_name=Path(candidate).name or "source",
             ref=ref,
         )
 

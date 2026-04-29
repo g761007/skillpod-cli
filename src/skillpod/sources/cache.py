@@ -39,7 +39,14 @@ def parse_repo_url(url: str) -> tuple[str, str]:
     forward slashes regardless of platform.
     """
     if url.startswith(("http://", "https://", "ssh://", "git://", "file://")):
-        parsed = urlparse(url)
+        # Normalize Windows-style file:// URLs: file://C:\... → file:///C:/...
+        url_to_parse = url
+        if url.startswith("file://"):
+            url_to_parse = url.replace("\\", "/")
+            after = url_to_parse[7:]  # strip "file://"
+            if after and after[0] != "/" and not (len(after) > 1 and after[1] == "/"):
+                url_to_parse = "file:///" + after
+        parsed = urlparse(url_to_parse)
         host = parsed.hostname or parsed.netloc or "localhost"
         path = parsed.path.lstrip("/")
     elif "@" in url and ":" in url and not url.startswith("/"):

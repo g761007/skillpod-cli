@@ -177,6 +177,18 @@
           "title": "Ref",
           "type": "string"
         },
+        "subpath": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subpath"
+        },
         "type": {
           "enum": [
             "local",

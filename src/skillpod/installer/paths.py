@@ -53,7 +53,11 @@ def is_managed_fanout(link_path: Path, project_root: Path) -> bool:
     """
     if not link_path.is_symlink():
         return False
-    raw = Path(os.readlink(link_path))
+    raw_str = os.readlink(link_path)
+    # Windows extended-length path prefix (\\?\) breaks relative_to comparison; strip it.
+    if raw_str.startswith("\\\\?\\"):
+        raw_str = raw_str[4:]
+    raw = Path(raw_str)
     immediate = raw if raw.is_absolute() else (link_path.parent / raw)
     try:
         parent_canonical = immediate.parent.resolve(strict=False)
