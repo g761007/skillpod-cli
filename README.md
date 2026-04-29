@@ -40,6 +40,12 @@ discover → resolve → lock → install
 
 ---
 
+## Prerequisites
+
+- Python **3.11+**
+- `git` installed and available in `$PATH` (required — used for all git source installs)
+- Windows users: symlink mode requires Developer Mode or admin privileges; set `install.mode: copy` as a fallback
+
 ## Installation
 
 ```bash
@@ -67,6 +73,23 @@ skillpod install
 # 4. Inspect what landed where
 skillpod list
 ```
+
+### What changed on disk
+
+After running the four commands above:
+
+```
+project/
+├── skillfile.yml       ← declares sources, agents, and skills
+├── skillfile.lock      ← pins each skill to a git commit + sha256
+└── .skillpod/
+    └── skills/
+        └── audit/      ← real directory copy (survives cache clears)
+.claude/skills/audit    →  ../../.skillpod/skills/audit
+.codex/skills/audit     →  ../../.skillpod/skills/audit
+```
+
+> **Tip:** Commit `skillfile.lock` alongside `skillfile.yml` so teammates and CI reproduce exactly the same skills.
 
 ### Adding skills from a git source
 
@@ -389,6 +412,32 @@ skillpod global archive '*' --json
 Full history: [`CHANGELOG.md`](./CHANGELOG.md).
 Original design notes: [`plans/skillpod-plan.md`](./plans/skillpod-plan.md).
 Specs: [`openspec/specs/`](./openspec/specs/).
+
+---
+
+## Troubleshooting
+
+**Agent directory is empty after `skillpod install`**
+Ensure `agents:` is declared in `skillfile.yml`. The default is `[]`, which disables fan-out entirely.
+
+**Symlink creation fails (Windows / CI)**
+Set `install.mode: copy` in `skillfile.yml`, or add `fallback: [copy]` so copy is tried automatically when symlinks are denied.
+
+**`global archive '*'` expands to filenames instead of running**
+Quote the asterisk: `skillpod global archive '*'` — without quotes the shell expands `*` to files in the current directory.
+
+**`skillpod add <owner/repo>` fails with a git error**
+Ensure `git` is installed and in `$PATH`. For private repos, verify your SSH key or HTTPS credentials are configured.
+
+**`skillfile.lock` hash mismatch / integrity error**
+Run `skillpod doctor` to identify which skills are out of sync, then `skillpod update <name>` to re-resolve and repin.
+
+**Cache is corrupted or taking too much disk space**
+Clear `~/.cache/skillpod/` freely — it is a download buffer only. Installed skills under `.skillpod/skills/` are real directories and are unaffected.
+
+**`skillpod install` vs `skillpod sync` — which do I need?**
+- `install` — re-resolves sources and re-materialises skills; use after editing `skillfile.yml`
+- `sync` — rebuilds fan-out entries from the existing lockfile without re-resolving; use after changing `agents:` or after a fresh clone
 
 ---
 
