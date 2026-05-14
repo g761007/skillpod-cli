@@ -1839,3 +1839,154 @@ def test_resolve_unknown_profile_exits_1(
     )
 
     assert result.exit_code == 1
+
+
+# ---- activation policy (v0.6.1) ----------------------------------------------
+
+
+def test_status_shows_activation_line(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    proj = _project(
+        tmp_path,
+        "version: 1\nskills:\n  - audit\n"
+        "activation:\n  mode: strict\n  inherit_global: false\n",
+    )
+
+    result = runner.invoke(
+        app, ["status", "--manifest", str(proj / "skillfile.yml")]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "activation: strict / inherit_global=false" in result.output
+
+
+def test_status_json_has_activation_key(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    proj = _project(
+        tmp_path,
+        "version: 1\nskills:\n  - audit\n"
+        "activation:\n  mode: merge\n  inherit_global: true\n",
+    )
+
+    result = runner.invoke(
+        app, ["status", "--manifest", str(proj / "skillfile.yml"), "--json"]
+    )
+
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.stdout)
+    assert data["activation"]["mode"] == "merge"
+    assert data["activation"]["inherit_global"] is True
+
+
+def test_resolve_ignore_global_skips_global_profile(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from skillpod.manifest.models import ProfileEntry
+    from skillpod.profile.io import write_global_profile
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    write_global_profile("reviewer", ProfileEntry(skills=["audit"]), home=tmp_path)
+    proj = _project(tmp_path, "version: 1\nskills:\n  - audit\n")
+
+    result = runner.invoke(
+        app,
+        [
+            "resolve",
+            "--profile", "reviewer",
+            "--ignore-global",
+            "--manifest", str(proj / "skillfile.yml"),
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 1  # profile not found (global skipped)
+
+
+def test_activation_strict_rejects_global_via_cli(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from skillpod.manifest.models import ProfileEntry
+    from skillpod.profile.io import write_global_profile
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    write_global_profile("reviewer", ProfileEntry(skills=["audit"]), home=tmp_path)
+    proj = _project(
+        tmp_path,
+        "version: 1\nskills:\n  - audit\n"
+        "activation:\n  mode: strict\n",
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "resolve",
+            "--profile", "reviewer",
+            "--manifest", str(proj / "skillfile.yml"),
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 1
+
+
+def test_activation_fallback_uses_global_via_cli(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from skillpod.manifest.models import ProfileEntry
+    from skillpod.profile.io import write_global_profile
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    write_global_profile("g-rev", ProfileEntry(skills=["audit"]), home=tmp_path)
+    proj = _project(
+        tmp_path,
+        "version: 1\nskills:\n  - audit\n"
+        "activation:\n  mode: fallback\n",
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "resolve",
+            "--profile", "g-rev",
+            "--manifest", str(proj / "skillfile.yml"),
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.stdout)
+    assert data["skills"] == ["audit"]
+
+
+def test_activation_merge_unions_skills_via_cli(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from skillpod.manifest.models import ProfileEntry
+    from skillpod.profile.io import write_global_profile
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    write_global_profile("dev", ProfileEntry(skills=["review"]), home=tmp_path)
+    proj = _project(
+        tmp_path,
+        "version: 1\nskills:\n  - audit\n  - review\n"
+        "profiles:\n  dev:\n    skills: [audit]\n"
+        "activation:\n  mode: merge\n",
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "resolve",
+            "--profile", "dev",
+            "--manifest", str(proj / "skillfile.yml"),
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.stdout)
+    assert sorted(data["skills"]) == ["audit", "review"]

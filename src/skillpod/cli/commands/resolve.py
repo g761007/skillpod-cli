@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import typer
+
 from skillpod.cli._output import emit, run_with_exit_codes
 from skillpod.manifest.loader import load
 from skillpod.skillset.compose import compose_effective_skillset
@@ -18,12 +20,20 @@ def run(
     profile_name: str | None,
     explain: bool,
     home: Path | None = None,
+    ignore_global: bool = False,
 ) -> None:
     def _run() -> None:
         manifest = load(manifest_path)
         effective = compose_effective_skillset(
-            manifest, project_root, profile_name=profile_name, home=home
+            manifest,
+            project_root,
+            profile_name=profile_name,
+            home=home,
+            ignore_global=ignore_global,
         )
+
+        for w in effective.warnings:
+            typer.echo(f"warning: {w}", err=True)
 
         if json_output:
             payload: dict[str, Any] = {

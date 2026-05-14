@@ -589,3 +589,67 @@ def test_profile_empty_body_accepted() -> None:
     )
     assert manifest.profiles["reviewer"].skills == []
     assert manifest.profiles["reviewer"].agents == []
+
+
+# ---- ActivationPolicy -------------------------------------------------------
+
+
+def test_activation_policy_defaults() -> None:
+    manifest = loads("version: 1\n")
+
+    assert manifest.activation.mode == "manual"
+    assert manifest.activation.inherit_global is True
+    assert manifest.activation.default_profile is None
+
+
+def test_activation_strict_mode_accepted() -> None:
+    manifest = loads(
+        textwrap.dedent("""
+            version: 1
+            activation:
+              mode: strict
+        """)
+    )
+    assert manifest.activation.mode == "strict"
+
+
+def test_activation_default_profile_missing_rejected() -> None:
+    with pytest.raises(ManifestError, match="does not exist"):
+        loads(
+            textwrap.dedent("""
+                version: 1
+                activation:
+                  mode: fallback
+                  default_profile: no-such-profile
+            """)
+        )
+
+
+def test_activation_manual_with_default_profile_rejected() -> None:
+    with pytest.raises(ManifestError, match="manual"):
+        loads(
+            textwrap.dedent("""
+                version: 1
+                profiles:
+                  reviewer: {}
+                activation:
+                  mode: manual
+                  default_profile: reviewer
+            """)
+        )
+
+
+def test_activation_invalid_mode_rejected() -> None:
+    with pytest.raises(ManifestError):
+        loads(
+            textwrap.dedent("""
+                version: 1
+                activation:
+                  mode: nonexistent
+            """)
+        )
+
+
+def test_activation_non_mapping_rejected() -> None:
+    with pytest.raises(ManifestError, match="mapping"):
+        loads("version: 1\nactivation: bad\n")

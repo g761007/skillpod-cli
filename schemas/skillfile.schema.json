@@ -1,5 +1,42 @@
 {
   "$defs": {
+    "ActivationPolicy": {
+      "additionalProperties": false,
+      "description": "Declares how profiles are resolved for this project.\n\nDefaults to ``manual`` + ``inherit_global=True``, which is backward-compatible\nwith v0.6.0: profiles are applied only when ``--profile`` is passed explicitly,\nand global profiles are eligible as a fallback.",
+      "properties": {
+        "default_profile": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Default Profile"
+        },
+        "inherit_global": {
+          "default": true,
+          "title": "Inherit Global",
+          "type": "boolean"
+        },
+        "mode": {
+          "default": "manual",
+          "enum": [
+            "strict",
+            "merge",
+            "fallback",
+            "manual"
+          ],
+          "title": "Mode",
+          "type": "string"
+        }
+      },
+      "title": "ActivationPolicy",
+      "type": "object"
+    },
     "AgentEntry": {
       "additionalProperties": false,
       "description": "Normalised representation of one entry in the `agents:` list.\n\nThe manifest accepts two forms:\n- Bare string: ``claude``  (legacy, 0.1.0 compatible)\n- Object form: ``{name: claude, adapter: my_module.MyAdapter}``\n\nThe loader normalises both into this model before validation.",
@@ -257,6 +294,9 @@
   "additionalProperties": false,
   "description": "JSON Schema for skillfile.yml v1 (skillpod manifest format).",
   "properties": {
+    "activation": {
+      "$ref": "#/$defs/ActivationPolicy"
+    },
     "agents": {
       "items": {
         "$ref": "#/$defs/AgentEntry"

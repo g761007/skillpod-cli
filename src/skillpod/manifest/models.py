@@ -160,6 +160,19 @@ class ProfileEntry(_StrictModel):
         return value
 
 
+class ActivationPolicy(_StrictModel):
+    """Declares how profiles are resolved for this project.
+
+    Defaults to ``manual`` + ``inherit_global=True``, which is backward-compatible
+    with v0.6.0: profiles are applied only when ``--profile`` is passed explicitly,
+    and global profiles are eligible as a fallback.
+    """
+
+    mode: Literal["strict", "merge", "fallback", "manual"] = "manual"
+    default_profile: str | None = Field(default=None, min_length=1)
+    inherit_global: bool = True
+
+
 class Skillfile(_StrictModel):
     """Top-level model for skillfile.yml v1."""
 
@@ -172,6 +185,7 @@ class Skillfile(_StrictModel):
     groups: dict[str, list[SkillRef]] = Field(default_factory=dict)
     use: list[str] = Field(default_factory=list)
     profiles: dict[str, ProfileEntry] = Field(default_factory=dict)
+    activation: ActivationPolicy = Field(default_factory=ActivationPolicy)
 
     @field_validator("agents")
     @classmethod
@@ -264,11 +278,26 @@ class Skillfile(_StrictModel):
                     + ", ".join(repr(a) for a in unknown_agents)
                 )
 
+        if (
+            self.activation.default_profile is not None
+            and self.activation.default_profile not in self.profiles
+        ):
+            raise ValueError(
+                f"activation.default_profile '{self.activation.default_profile}' "
+                "does not exist in `profiles:`"
+            )
+        if self.activation.mode == "manual" and self.activation.default_profile is not None:
+            raise ValueError(
+                "activation.mode is 'manual' but default_profile is set; "
+                "manual mode requires explicit --profile and does not auto-apply a default"
+            )
+
         return self
 
 
 __all__ = [
     "SUPPORTED_AGENTS",
+    "ActivationPolicy",
     "AgentEntry",
     "InstallPolicy",
     "ProfileEntry",

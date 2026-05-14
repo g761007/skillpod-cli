@@ -520,6 +520,10 @@ def status_command(
         str | None,
         typer.Option("--profile", "-p", help="Profile to apply (shows effective skills)."),
     ] = None,
+    ignore_global: Annotated[
+        bool,
+        typer.Option("--ignore-global", help="Skip global profiles (~/.skillpod/profiles/)."),
+    ] = False,
     manifest: ManifestOpt = Path("skillfile.yml"),
     json: JsonOpt = False,
 ) -> None:
@@ -529,6 +533,7 @@ def status_command(
         manifest_path=manifest_path,
         json_output=json,
         profile_name=profile,
+        ignore_global=ignore_global,
     )
 
 
@@ -542,6 +547,10 @@ def resolve_command(
         bool,
         typer.Option("--explain", "-e", help="Show the layer origin for each skill."),
     ] = False,
+    ignore_global: Annotated[
+        bool,
+        typer.Option("--ignore-global", help="Skip global profiles (~/.skillpod/profiles/)."),
+    ] = False,
     manifest: ManifestOpt = Path("skillfile.yml"),
     json: JsonOpt = False,
 ) -> None:
@@ -552,6 +561,7 @@ def resolve_command(
         json_output=json,
         profile_name=profile,
         explain=explain,
+        ignore_global=ignore_global,
     )
 
 
