@@ -445,6 +445,9 @@ skillpod global archive '*' --json
 | 0.5.5     | shipped     | `skillpod add owner/repo` auto-detects the remote's default branch (no longer hardcodes `main`) |
 | 0.5.6     | shipped     | browser tree URL subpath support; `global archive` batch/wildcard mode; global add no longer fans out |
 | 0.5.7     | shipped     | `global list` defaults to `~/.skillpod/skills/` view with LINKED column; new `global link` / `global unlink` / `--verbose` |
+| 0.6.x     | preview     | Workspace Profiles — reusable AI working contexts with project isolation, safe switching, session shell, and composition |
+| 0.7.0     | planned     | Profile model beta — schema + resolver precedence + activation scope stable |
+| 0.8.0     | planned     | Local-first visual management UI (`skillpod ui`)            |
 | 1.0.0     | planned     | schema freeze                                               |
 
 Full history: [`CHANGELOG.md`](./CHANGELOG.md).
