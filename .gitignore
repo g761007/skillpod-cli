@@ -5,6 +5,9 @@
 # skillpod project install root (managed by `skillpod install`)
 .skillpod/
 
+# openspec planning artifacts (local only, not tracked in git)
+openspec/
+
 # Python build / cache
 __pycache__/
 *.py[cod]

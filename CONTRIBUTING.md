@@ -35,32 +35,12 @@ src/skillpod/
   installer/       materialise into .skillpod/ + adapter fan-out
   cli/             typer commands
 tests/             pytest mirror of the above
-openspec/          spec-driven planning artifacts
 examples/          minimal skillfile.yml used by docs
 ```
 
 The codebase mirrors the **discover → resolve → lock → install** flow.
 When adding behaviour, prefer extending the matching capability rather than
 introducing a new top-level package.
-
-## Spec-driven changes (OpenSpec)
-
-Non-trivial changes are planned through [OpenSpec](https://openspec.dev/) before
-code lands. The flow:
-
-1. `openspec` (or the `openspec-new-change` skill) — create a `proposal.md`,
-   `tasks.md`, optional `design.md`, and delta `specs/`.
-2. Implement the tasks; tick them off in `tasks.md`.
-3. `openspec validate <change> --strict` (CI also runs this).
-4. `openspec archive <change> -y` once everything is implemented; archived
-   changes live under `openspec/changes/archive/YYYY-MM-DD-<name>/` and the
-   delta specs are merged into `openspec/specs/`.
-
-`openspec/config.yaml` documents the conventions (every requirement needs at
-least one `#### Scenario:` block, capability names stay stable, etc.).
-
-For tiny fixes (typos, single-line bugs) you can skip OpenSpec and submit the
-PR directly.
 
 ## Commit messages
 
@@ -72,8 +52,8 @@ e.g. `feat(0.4.0): adapter layer + copy/hardlink modes`.
 
 - Branch from `main`.
 - Keep PRs focused; one capability or one fix at a time.
-- All CI checks (lint, mypy, pytest on Linux/macOS/Windows, OpenSpec validate)
-  must be green before merge.
+- All CI checks (lint, mypy, pytest on Linux/macOS/Windows) must be green
+  before merge.
 - Update `CHANGELOG.md` under `[Unreleased]` for any user-visible change.
 
 ## Releasing

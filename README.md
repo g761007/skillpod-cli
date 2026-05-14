@@ -444,12 +444,11 @@ skillpod global archive '*' --json
 | 0.5.4     | shipped     | `skillpod add owner/repo` supports single-skill repos with `SKILL.md` at the root |
 | 0.5.5     | shipped     | `skillpod add owner/repo` auto-detects the remote's default branch (no longer hardcodes `main`) |
 | 0.5.6     | shipped     | browser tree URL subpath support; `global archive` batch/wildcard mode; global add no longer fans out |
-| **0.5.7** | **current** | `global list` defaults to `~/.skillpod/skills/` view with LINKED column; new `global link` / `global unlink` |
+| 0.5.7     | shipped     | `global list` defaults to `~/.skillpod/skills/` view with LINKED column; new `global link` / `global unlink` / `--verbose` |
 | 1.0.0     | planned     | schema freeze                                               |
 
 Full history: [`CHANGELOG.md`](./CHANGELOG.md).
 Original design notes: [`plans/skillpod-plan.md`](./plans/skillpod-plan.md).
-Specs: [`openspec/specs/`](./openspec/specs/).
 
 ---
 

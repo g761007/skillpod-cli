@@ -1,6 +1,6 @@
 [project]
 name = "skillpod"
-version = "0.5.6"
+version = "0.5.7"
 description = "Project-scoped, reproducible skill dependency manager for AI coding agents."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -67,7 +67,6 @@ include = [
     "src/skillpod",
     "schemas",
     "examples",
-    "openspec",
     "README.md",
     "CHANGELOG.md",
     "LICENSE",

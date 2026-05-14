@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.7] — 2026-05-14
+
+### Added
+
+- **`skillpod global link <name> [--agent ...]`** — fan-out an existing
+  `~/.skillpod/skills/<name>` to agent dirs (`~/.<agent>/skills/<name>`) as
+  symlinks, without re-fetching from source. `--yes/-y` replaces existing
+  entries; omitting `--agent` links to every known agent
+  (claude / codex / gemini / cursor / opencode / antigravity).
+- **`skillpod global unlink <name> [--agent ...]`** — remove managed
+  symlinks pointing into `~/.skillpod/skills/<name>`. Unmanaged entries
+  (real directories or symlinks pointing elsewhere) are skipped with a
+  warning, never overwritten.
+- **`skillpod global list -v/--verbose`** — Unicode box card view per skill
+  with description parsed from `SKILL.md` YAML frontmatter, ●/○ full-name
+  agent indicators, human-readable size, and install path. Terminal width is
+  capped at 100 cols for readability.
+- Shared helper `paths.is_managed_global_fanout(name, agent_dir)` exposing
+  the "is this agent entry a managed symlink into `~/.skillpod/skills/`"
+  predicate for reuse across list / link / unlink / archive.
+
+### Changed
+
+- **`skillpod global list` default view now shows the install root**
+  (`~/.skillpod/skills/`) as a compact NAME / LINKED / SIZE / MTIME table.
+  `LINKED` shows `all`, `-`, or an abbreviated agent list
+  (`cl,cx,ge,cu,oc,ag`). `MTIME` is date-only (`YYYY-MM-DD`). The previous
+  per-agent fan-out view is preserved as `--agents/-a`.
+- `installer.global_install._materialise_agent_link` promoted to public
+  `materialise_agent_link` so the new `global link` command can reuse it.
+- `global_archive` refactored to use the shared `is_managed_global_fanout`
+  helper (−24 lines, no behaviour change).
+
+### Removed
+
+- `openspec/` is no longer tracked in git. The directory remains usable
+  locally; its references in `README.md` (specs link) and `CONTRIBUTING.md`
+  (OpenSpec workflow section) are removed.
+
+### Internal
+
+- 11 new tests covering global list (install-root / agents views), link,
+  and unlink; 278 passed, 1 skipped.
+- `mypy --strict` clean across 55 files.
+
 ## [0.5.6] — 2026-04-28
 
 ### Added
@@ -281,7 +326,8 @@ required to publish.
 - pytest suite covering manifest, lockfile, source resolution, installer,
   and CLI smoke tests.
 
-[Unreleased]: https://github.com/g761007/skillpod-cli/compare/v0.5.6...HEAD
+[Unreleased]: https://github.com/g761007/skillpod-cli/compare/v0.5.7...HEAD
+[0.5.7]: https://github.com/g761007/skillpod-cli/compare/v0.5.6...v0.5.7
 [0.5.6]: https://github.com/g761007/skillpod-cli/compare/v0.5.5...v0.5.6
 [0.5.5]: https://github.com/g761007/skillpod-cli/releases/tag/v0.5.5
 [0.5.4]: https://github.com/g761007/skillpod-cli/releases/tag/v0.5.4
