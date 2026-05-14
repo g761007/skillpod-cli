@@ -24,6 +24,11 @@ from skillpod.cli.commands import (
     global_unlink,
     install_cmd,
     list_cmd,
+    profile_add,
+    profile_create,
+    profile_list,
+    profile_remove,
+    profile_show,
 )
 from skillpod.cli.commands import (
     init as init_cmd,
@@ -35,10 +40,16 @@ from skillpod.cli.commands import (
     remove as remove_cmd,
 )
 from skillpod.cli.commands import (
+    resolve as resolve_cmd,
+)
+from skillpod.cli.commands import (
     schema as schema_cmd,
 )
 from skillpod.cli.commands import (
     search as search_cmd,
+)
+from skillpod.cli.commands import (
+    status as status_cmd,
 )
 from skillpod.cli.commands import (
     sync as sync_cmd,
@@ -65,6 +76,12 @@ adapter_app = typer.Typer(
     no_args_is_help=True,
 )
 app.add_typer(adapter_app, name="adapter", help="Inspect the active adapter registry.")
+
+profile_app = typer.Typer(
+    help="Manage workspace profiles.",
+    no_args_is_help=True,
+)
+app.add_typer(profile_app, name="profile", help="Manage workspace profiles.")
 
 ManifestOpt = Annotated[
     Path,
@@ -494,6 +511,159 @@ def global_doctor_cmd(
         project_root=_project_root(manifest_path),
         manifest_path=manifest_path,
         json_output=json,
+    )
+
+
+@app.command("status", help="Show project and profile state.")
+def status_command(
+    profile: Annotated[
+        str | None,
+        typer.Option("--profile", "-p", help="Profile to apply (shows effective skills)."),
+    ] = None,
+    manifest: ManifestOpt = Path("skillfile.yml"),
+    json: JsonOpt = False,
+) -> None:
+    manifest_path = manifest if manifest.is_absolute() else (Path.cwd() / manifest).resolve()
+    status_cmd.run(
+        project_root=_project_root(manifest_path),
+        manifest_path=manifest_path,
+        json_output=json,
+        profile_name=profile,
+    )
+
+
+@app.command("resolve", help="Show the effective skill set (with optional profile filter).")
+def resolve_command(
+    profile: Annotated[
+        str | None,
+        typer.Option("--profile", "-p", help="Profile name to apply as a filter."),
+    ] = None,
+    explain: Annotated[
+        bool,
+        typer.Option("--explain", "-e", help="Show the layer origin for each skill."),
+    ] = False,
+    manifest: ManifestOpt = Path("skillfile.yml"),
+    json: JsonOpt = False,
+) -> None:
+    manifest_path = manifest if manifest.is_absolute() else (Path.cwd() / manifest).resolve()
+    resolve_cmd.run(
+        project_root=_project_root(manifest_path),
+        manifest_path=manifest_path,
+        json_output=json,
+        profile_name=profile,
+        explain=explain,
+    )
+
+
+@profile_app.command("create", help="Create a new empty profile.")
+def profile_create_cmd(
+    name: Annotated[str, typer.Argument(help="Profile name (letters, digits, hyphens, underscores).")],
+    is_global: Annotated[
+        bool,
+        typer.Option("--global", "-g", help="Create a global profile in ~/.skillpod/profiles/."),
+    ] = False,
+    profile_type: Annotated[
+        str | None,
+        typer.Option("--type", "-t", help="Profile type label (display only: role / project / task / team)."),
+    ] = None,
+    manifest: ManifestOpt = Path("skillfile.yml"),
+    json: JsonOpt = False,
+) -> None:
+    manifest_path = manifest if manifest.is_absolute() else (Path.cwd() / manifest).resolve()
+    profile_create.run(
+        project_root=_project_root(manifest_path),
+        manifest_path=manifest_path,
+        json_output=json,
+        name=name,
+        is_global=is_global,
+        profile_type=profile_type,
+    )
+
+
+@profile_app.command("list", help="List available profiles (project and/or global).")
+def profile_list_cmd(
+    global_only: Annotated[
+        bool,
+        typer.Option("--global", "-g", help="Show only global profiles."),
+    ] = False,
+    project_only: Annotated[
+        bool,
+        typer.Option("--project", help="Show only project profiles."),
+    ] = False,
+    manifest: ManifestOpt = Path("skillfile.yml"),
+    json: JsonOpt = False,
+) -> None:
+    manifest_path = manifest if manifest.is_absolute() else (Path.cwd() / manifest).resolve()
+    profile_list.run(
+        project_root=_project_root(manifest_path),
+        manifest_path=manifest_path,
+        json_output=json,
+        global_only=global_only,
+        project_only=project_only,
+    )
+
+
+@profile_app.command("show", help="Show the content of a profile.")
+def profile_show_cmd(
+    name: Annotated[str, typer.Argument(help="Profile name.")],
+    is_global: Annotated[
+        bool,
+        typer.Option("--global", "-g", help="Look in global profiles only."),
+    ] = False,
+    manifest: ManifestOpt = Path("skillfile.yml"),
+    json: JsonOpt = False,
+) -> None:
+    manifest_path = manifest if manifest.is_absolute() else (Path.cwd() / manifest).resolve()
+    profile_show.run(
+        project_root=_project_root(manifest_path),
+        manifest_path=manifest_path,
+        json_output=json,
+        name=name,
+        is_global=is_global,
+    )
+
+
+@profile_app.command("add", help="Add a skill to a profile.")
+def profile_add_cmd(
+    profile_name: Annotated[str, typer.Argument(help="Profile name.")],
+    skill_name: Annotated[str, typer.Argument(help="Skill name to add.")],
+    is_global: Annotated[
+        bool,
+        typer.Option("--global", "-g", help="Target a global profile."),
+    ] = False,
+    manifest: ManifestOpt = Path("skillfile.yml"),
+    json: JsonOpt = False,
+) -> None:
+    manifest_path = manifest if manifest.is_absolute() else (Path.cwd() / manifest).resolve()
+    profile_add.run(
+        project_root=_project_root(manifest_path),
+        manifest_path=manifest_path,
+        json_output=json,
+        profile_name=profile_name,
+        skill_name=skill_name,
+        is_global=is_global,
+    )
+
+
+@profile_app.command("remove", help="Remove a skill from a profile.")
+def profile_remove_cmd(
+    profile_name: Annotated[str, typer.Argument(help="Profile name.")],
+    skill_name: Annotated[str, typer.Argument(help="Skill name to remove.")],
+    is_global: Annotated[
+        bool,
+        typer.Option("--global", "-g", help="Target a global profile."),
+    ] = False,
+    manifest: ManifestOpt = Path("skillfile.yml"),
+    json: JsonOpt = False,
+) -> None:
+    manifest_path = manifest if manifest.is_absolute() else (Path.cwd() / manifest).resolve()
+    profile_remove.run(
+        project_root=_project_root(manifest_path),
+        manifest_path=manifest_path,
+        json_output=json,
+        profile_name=profile_name,
+        skill_name=skill_name,
+        is_global=is_global,
     )
 
 

@@ -80,6 +80,24 @@ def _normalise_agents(raw: Any) -> list[dict[str, Any]]:
     return out
 
 
+def _normalise_profiles(raw: Any) -> dict[str, Any]:
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise ManifestError(f"`profiles:` must be a mapping, got {type(raw).__name__}")
+    result: dict[str, Any] = {}
+    for name, body in raw.items():
+        if not isinstance(name, str):
+            raise ManifestError(f"`profiles:` keys must be strings, got {type(name).__name__}")
+        if body is None:
+            result[name] = {}
+        elif not isinstance(body, dict):
+            raise ManifestError(f"`profiles.{name}`: must be a mapping, got {type(body).__name__}")
+        else:
+            result[name] = body
+    return result
+
+
 def loads(text: str) -> Skillfile:
     """Parse manifest YAML text into a `Skillfile`."""
     try:
@@ -100,6 +118,8 @@ def loads(text: str) -> Skillfile:
         data["groups"] = _normalise_groups(data["groups"])
     if "agents" in data:
         data["agents"] = _normalise_agents(data["agents"])
+    if "profiles" in data:
+        data["profiles"] = _normalise_profiles(data["profiles"])
 
     try:
         return Skillfile.model_validate(data)

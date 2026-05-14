@@ -1501,3 +1501,341 @@ def test_schema_command_writes_valid_json(runner: CliRunner, tmp_path: Path) -> 
     assert "version" in schema["properties"]
     assert "agents" in schema["properties"]
     assert "skills" in schema["properties"]
+
+
+# ---- profile create ----------------------------------------------------------
+
+
+def test_profile_create_project_creates_in_manifest(
+    runner: CliRunner, tmp_path: Path
+) -> None:
+    proj = _project(tmp_path, "version: 1\n")
+
+    result = runner.invoke(
+        app,
+        ["profile", "create", "reviewer", "--manifest", str(proj / "skillfile.yml"), "--json"],
+    )
+
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.stdout)
+    assert data == {"ok": True, "name": "reviewer", "scope": "project"}
+    import yaml
+    raw = yaml.safe_load((proj / "skillfile.yml").read_text())
+    assert "reviewer" in raw["profiles"]
+
+
+def test_profile_create_with_type(runner: CliRunner, tmp_path: Path) -> None:
+    proj = _project(tmp_path, "version: 1\n")
+
+    result = runner.invoke(
+        app,
+        [
+            "profile", "create", "reviewer",
+            "--type", "role",
+            "--manifest", str(proj / "skillfile.yml"),
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    import yaml
+    raw = yaml.safe_load((proj / "skillfile.yml").read_text())
+    assert raw["profiles"]["reviewer"]["type"] == "role"
+
+
+def test_profile_create_global(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    result = runner.invoke(app, ["profile", "create", "g-reviewer", "--global", "--json"])
+
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.stdout)
+    assert data["scope"] == "global"
+    assert (tmp_path / ".skillpod" / "profiles" / "g-reviewer.yml").exists()
+
+
+def test_profile_create_duplicate_project_exits_1(
+    runner: CliRunner, tmp_path: Path
+) -> None:
+    proj = _project(tmp_path, "version: 1\n")
+    mf = str(proj / "skillfile.yml")
+    runner.invoke(app, ["profile", "create", "reviewer", "--manifest", mf])
+
+    result = runner.invoke(app, ["profile", "create", "reviewer", "--manifest", mf, "--json"])
+
+    assert result.exit_code == 1
+
+
+# ---- profile list ------------------------------------------------------------
+
+
+def test_profile_list_shows_project_and_global(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    proj = _project(
+        tmp_path,
+        "version: 1\nprofiles:\n  local-p: {}\n",
+    )
+    # create a global profile via file
+    gdir = tmp_path / ".skillpod" / "profiles"
+    gdir.mkdir(parents=True)
+    import yaml
+    (gdir / "global-p.yml").write_text(
+        yaml.safe_dump({"version": 1, "profile": {}}), encoding="utf-8"
+    )
+
+    result = runner.invoke(
+        app,
+        ["profile", "list", "--manifest", str(proj / "skillfile.yml"), "--json"],
+    )
+
+    assert result.exit_code == 0, result.output
+    rows = json.loads(result.stdout)
+    names = {r["name"] for r in rows}
+    scopes = {r["name"]: r["scope"] for r in rows}
+    assert "local-p" in names
+    assert "global-p" in names
+    assert scopes["local-p"] == "project"
+    assert scopes["global-p"] == "global"
+
+
+def test_profile_list_empty(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    proj = _project(tmp_path, "version: 1\n")
+
+    result = runner.invoke(
+        app,
+        ["profile", "list", "--manifest", str(proj / "skillfile.yml")],
+    )
+
+    assert result.exit_code == 0
+    assert "no profiles found" in result.output
+
+
+# ---- profile show ------------------------------------------------------------
+
+
+def test_profile_show_project_profile(runner: CliRunner, tmp_path: Path) -> None:
+    proj = _project(
+        tmp_path,
+        "version: 1\nprofiles:\n  reviewer:\n    type: role\n    skills: []\n",
+    )
+
+    result = runner.invoke(
+        app,
+        ["profile", "show", "reviewer", "--manifest", str(proj / "skillfile.yml"), "--json"],
+    )
+
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.stdout)
+    assert data["name"] == "reviewer"
+    assert data["scope"] == "project"
+    assert data["type"] == "role"
+
+
+def test_profile_show_not_found_exits_1(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    proj = _project(tmp_path, "version: 1\n")
+
+    result = runner.invoke(
+        app,
+        ["profile", "show", "nobody", "--manifest", str(proj / "skillfile.yml"), "--json"],
+    )
+
+    assert result.exit_code == 1
+
+
+# ---- profile add / remove ----------------------------------------------------
+
+
+def test_profile_add_skill_to_project_profile(runner: CliRunner, tmp_path: Path) -> None:
+    proj = _project(tmp_path, "version: 1\nskills:\n  - audit\n")
+    mf = str(proj / "skillfile.yml")
+    runner.invoke(app, ["profile", "create", "reviewer", "--manifest", mf])
+
+    result = runner.invoke(
+        app,
+        ["profile", "add", "reviewer", "audit", "--manifest", mf, "--json"],
+    )
+
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.stdout)
+    assert data == {"ok": True, "profile": "reviewer", "skill": "audit", "scope": "project"}
+    import yaml
+    raw = yaml.safe_load((proj / "skillfile.yml").read_text())
+    assert "audit" in raw["profiles"]["reviewer"]["skills"]
+
+
+def test_profile_add_unknown_skill_exits_1(runner: CliRunner, tmp_path: Path) -> None:
+    proj = _project(tmp_path, "version: 1\nskills:\n  - audit\n")
+    mf = str(proj / "skillfile.yml")
+    runner.invoke(app, ["profile", "create", "reviewer", "--manifest", mf])
+
+    result = runner.invoke(
+        app,
+        ["profile", "add", "reviewer", "no-such-skill", "--manifest", mf, "--json"],
+    )
+
+    assert result.exit_code == 1
+    err = json.loads(result.stderr)
+    assert "not declared" in err["error"]
+
+
+def test_profile_remove_skill_from_project_profile(runner: CliRunner, tmp_path: Path) -> None:
+    proj = _project(tmp_path, "version: 1\nskills:\n  - audit\n")
+    mf = str(proj / "skillfile.yml")
+    runner.invoke(app, ["profile", "create", "reviewer", "--manifest", mf])
+    runner.invoke(app, ["profile", "add", "reviewer", "audit", "--manifest", mf])
+
+    result = runner.invoke(
+        app,
+        ["profile", "remove", "reviewer", "audit", "--manifest", mf, "--json"],
+    )
+
+    assert result.exit_code == 0, result.output
+    import yaml
+    raw = yaml.safe_load((proj / "skillfile.yml").read_text())
+    assert raw["profiles"]["reviewer"]["skills"] == []
+
+
+def test_profile_remove_not_in_profile_exits_1(runner: CliRunner, tmp_path: Path) -> None:
+    proj = _project(tmp_path, "version: 1\nskills:\n  - audit\n")
+    mf = str(proj / "skillfile.yml")
+    runner.invoke(app, ["profile", "create", "reviewer", "--manifest", mf])
+
+    result = runner.invoke(
+        app,
+        ["profile", "remove", "reviewer", "audit", "--manifest", mf, "--json"],
+    )
+
+    assert result.exit_code == 1
+
+
+# ---- status ------------------------------------------------------------------
+
+
+def test_status_shows_project_info(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    proj = _project(tmp_path, "version: 1\nskills:\n  - audit\n")
+
+    result = runner.invoke(
+        app,
+        ["status", "--manifest", str(proj / "skillfile.yml"), "--json"],
+    )
+
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.stdout)
+    assert data["skills"] == 1
+    assert "profiles" in data
+
+
+def test_status_with_profile_shows_effective_skills(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    proj = _project(
+        tmp_path,
+        "version: 1\nskills:\n  - audit\n  - review\n"
+        "profiles:\n  reviewer:\n    skills: [audit]\n",
+    )
+
+    result = runner.invoke(
+        app,
+        ["status", "--profile", "reviewer", "--manifest", str(proj / "skillfile.yml"), "--json"],
+    )
+
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.stdout)
+    assert data["effective_skills"] == ["audit"]
+    assert data["active_profile"] == "reviewer"
+
+
+# ---- resolve -----------------------------------------------------------------
+
+
+def test_resolve_no_profile_shows_all_skills(runner: CliRunner, tmp_path: Path) -> None:
+    proj = _project(tmp_path, "version: 1\nskills:\n  - audit\n  - review\n")
+
+    result = runner.invoke(
+        app,
+        ["resolve", "--manifest", str(proj / "skillfile.yml"), "--json"],
+    )
+
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.stdout)
+    assert data["skills"] == ["audit", "review"]
+    assert data["profile"] is None
+
+
+def test_resolve_with_profile_filters(runner: CliRunner, tmp_path: Path) -> None:
+    proj = _project(
+        tmp_path,
+        "version: 1\nskills:\n  - audit\n  - review\n"
+        "profiles:\n  reviewer:\n    skills: [audit]\n",
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "resolve",
+            "--profile", "reviewer",
+            "--manifest", str(proj / "skillfile.yml"),
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.stdout)
+    assert data["skills"] == ["audit"]
+
+
+def test_resolve_explain_json_has_provenance(runner: CliRunner, tmp_path: Path) -> None:
+    proj = _project(
+        tmp_path,
+        "version: 1\nskills:\n  - audit\n  - review\n"
+        "profiles:\n  reviewer:\n    skills: [audit]\n",
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "resolve",
+            "--profile", "reviewer",
+            "--explain",
+            "--manifest", str(proj / "skillfile.yml"),
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.stdout)
+    assert "provenance" in data
+    assert data["provenance"]["audit"] == "profile_filter"
+
+
+def test_resolve_unknown_profile_exits_1(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    proj = _project(tmp_path, "version: 1\nskills:\n  - audit\n")
+
+    result = runner.invoke(
+        app,
+        [
+            "resolve",
+            "--profile", "no-such-profile",
+            "--manifest", str(proj / "skillfile.yml"),
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 1
