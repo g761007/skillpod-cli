@@ -67,6 +67,40 @@
       "title": "InstallPolicy",
       "type": "object"
     },
+    "ProfileEntry": {
+      "additionalProperties": false,
+      "description": "One named profile under `profiles:` in skillfile.yml.\n\nIn filter mode (v0.6.x), ``skills`` must reference names already declared\nin the project's skill set.  ``type`` is display-only and does not affect\nresolution behaviour.",
+      "properties": {
+        "agents": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Agents",
+          "type": "array"
+        },
+        "skills": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Skills",
+          "type": "array"
+        },
+        "type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Type"
+        }
+      },
+      "title": "ProfileEntry",
+      "type": "object"
+    },
     "RegistryConfig": {
       "additionalProperties": false,
       "description": "`registry:` block.",
@@ -242,6 +276,13 @@
     },
     "install": {
       "$ref": "#/$defs/InstallPolicy"
+    },
+    "profiles": {
+      "additionalProperties": {
+        "$ref": "#/$defs/ProfileEntry"
+      },
+      "title": "Profiles",
+      "type": "object"
     },
     "registry": {
       "$ref": "#/$defs/RegistryConfig"
