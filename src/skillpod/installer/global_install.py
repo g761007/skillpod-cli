@@ -140,7 +140,7 @@ def install_global(
         for agent in target_agents:
             link_path = global_agent_skill_dir(agent, skill.name, home)
             link_path.parent.mkdir(parents=True, exist_ok=True)
-            _materialise_agent_link(link_path, install_link, adapter, mode, force=force)
+            materialise_agent_link(link_path, install_link, adapter, mode, force=force)
             installed.fanned_out_to.append(agent)
 
         report.installed.append(installed)
@@ -211,7 +211,7 @@ def _materialise_install_root(
         ) from exc
 
 
-def _materialise_agent_link(
+def materialise_agent_link(
     link: Path,
     source: Path,
     adapter: IdentityAdapter,
@@ -293,6 +293,7 @@ __all__ = [
     "GlobalInstallReport",
     "GlobalInstalledSkill",
     "install_global",
+    "materialise_agent_link",
     "uninstall_global",
 ]
 

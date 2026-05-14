@@ -19,7 +19,9 @@ from skillpod.cli.commands import (
 from skillpod.cli.commands import (
     global_archive,
     global_doctor,
+    global_link,
     global_list,
+    global_unlink,
     install_cmd,
     list_cmd,
 )
@@ -353,16 +355,34 @@ def schema_command(
     )
 
 
-@global_app.command("list", help="List global skills across known agents.")
+@global_app.command("list", help="List skills in ~/.skillpod/skills/. Use -a/--agents for per-agent view.")
 def global_list_cmd(
     manifest: ManifestOpt = Path("skillfile.yml"),
     json: JsonOpt = False,
+    agents_view: Annotated[
+        bool,
+        typer.Option(
+            "--agents",
+            "-a",
+            help="Show per-agent fan-out view (~/.<agent>/skills/) instead of ~/.skillpod/skills/.",
+        ),
+    ] = False,
+    verbose: Annotated[
+        bool,
+        typer.Option(
+            "--verbose",
+            "-v",
+            help="Show detailed card view with description and per-agent link indicators.",
+        ),
+    ] = False,
 ) -> None:
     manifest_path = manifest if manifest.is_absolute() else (Path.cwd() / manifest).resolve()
     global_list.run(
         project_root=_project_root(manifest_path),
         manifest_path=manifest_path,
         json_output=json,
+        agents_view=agents_view,
+        verbose=verbose,
     )
 
 
@@ -404,6 +424,63 @@ def global_archive_cmd(
         skill_names=skill_names,
         json_output=json,
         force=force,
+    )
+
+
+@global_app.command("link", help="Fan-out a globally installed skill to agent directories.")
+def global_link_cmd(
+    skill: Annotated[str, typer.Argument(help="Skill name to link (must exist in ~/.skillpod/skills/).")],
+    agent: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--agent",
+            "-a",
+            help="Target agent(s). Repeatable. Defaults to all known agents.",
+        ),
+    ] = None,
+    yes: Annotated[
+        bool,
+        typer.Option(
+            "--yes",
+            "-y",
+            help="Overwrite existing entries in agent directories without prompting.",
+        ),
+    ] = False,
+    manifest: ManifestOpt = Path("skillfile.yml"),
+    json: JsonOpt = False,
+) -> None:
+    manifest_path = manifest if manifest.is_absolute() else (Path.cwd() / manifest).resolve()
+    global_link.run(
+        project_root=_project_root(manifest_path),
+        manifest_path=manifest_path,
+        skill_name=skill,
+        agents=agent,
+        yes=yes,
+        json_output=json,
+    )
+
+
+@global_app.command("unlink", help="Remove agent fan-out symlinks for a globally installed skill.")
+def global_unlink_cmd(
+    skill: Annotated[str, typer.Argument(help="Skill name to unlink from agent directories.")],
+    agent: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--agent",
+            "-a",
+            help="Target agent(s). Repeatable. Defaults to all known agents.",
+        ),
+    ] = None,
+    manifest: ManifestOpt = Path("skillfile.yml"),
+    json: JsonOpt = False,
+) -> None:
+    manifest_path = manifest if manifest.is_absolute() else (Path.cwd() / manifest).resolve()
+    global_unlink.run(
+        project_root=_project_root(manifest_path),
+        manifest_path=manifest_path,
+        skill_name=skill,
+        agents=agent,
+        json_output=json,
     )
 
 

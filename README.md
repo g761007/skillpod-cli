@@ -352,11 +352,48 @@ IDEs can use this schema for autocomplete and validation.
 | `skillpod outdated`  | Show which locked skills have drifted from upstream                      |
 | `skillpod update`    | Re-resolve and refresh skills in the lockfile                            |
 | `skillpod doctor`    | Verify manifest / lockfile / symlink consistency                         |
-| `skillpod global`    | Inspect, consolidate, or audit global agent skill directories            |
+| `skillpod global`    | Manage global skills: list, link/unlink to agents, consolidate, audit   |
 | `skillpod adapter`   | Inspect the active adapter registry                                      |
 
 `--help` on any subcommand shows full options. `--json` produces
 machine-readable output where it makes sense.
+
+### `skillpod global list`
+
+Lists skills in the canonical global install root (`~/.skillpod/skills/`).
+The `LINKED` column shows which agents currently have a managed symlink pointing
+to each skill.
+
+```bash
+skillpod global list           # default: ~/.skillpod/skills/ view
+skillpod global list --agents  # per-agent view (~/.<agent>/skills/)
+skillpod global list --json    # machine-readable
+```
+
+### `skillpod global link` / `skillpod global unlink`
+
+Fan-out or remove agent symlinks for an already-installed global skill without
+re-fetching from source.
+
+| Invocation | Effect |
+| --- | --- |
+| `skillpod global link <name>` | Create symlinks in **all** known agent dirs |
+| `skillpod global link <name> --agent codex --agent gemini` | Link to specific agents only |
+| `skillpod global link <name> --yes` | Overwrite existing entries |
+| `skillpod global unlink <name>` | Remove managed symlinks from all agents |
+| `skillpod global unlink <name> --agent codex` | Remove managed symlink for one agent |
+
+`unlink` only removes symlinks whose immediate target is `~/.skillpod/skills/<name>`.
+Unmanaged entries (real directories or symlinks pointing elsewhere) are skipped with
+a warning.
+
+```bash
+# link a skill to two agents
+skillpod global link my-linter --agent claude --agent codex
+
+# remove all agent links but keep the install root intact
+skillpod global unlink my-linter
+```
 
 ### `skillpod global archive`
 
@@ -406,7 +443,8 @@ skillpod global archive '*' --json
 | 0.5.3     | shipped     | install root materialised as real-directory copy (cache-prune safe) |
 | 0.5.4     | shipped     | `skillpod add owner/repo` supports single-skill repos with `SKILL.md` at the root |
 | 0.5.5     | shipped     | `skillpod add owner/repo` auto-detects the remote's default branch (no longer hardcodes `main`) |
-| **0.5.6** | **current** | browser tree URL subpath support; `global archive` batch/wildcard mode; global add no longer fans out |
+| 0.5.6     | shipped     | browser tree URL subpath support; `global archive` batch/wildcard mode; global add no longer fans out |
+| **0.5.7** | **current** | `global list` defaults to `~/.skillpod/skills/` view with LINKED column; new `global link` / `global unlink` |
 | 1.0.0     | planned     | schema freeze                                               |
 
 Full history: [`CHANGELOG.md`](./CHANGELOG.md).

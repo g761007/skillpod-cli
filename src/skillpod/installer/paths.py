@@ -40,6 +40,35 @@ def global_agent_skill_dir(agent: str, skill_name: str, home: Path | None = None
     return base / f".{agent}" / "skills" / skill_name
 
 
+def is_managed_global_fanout(
+    link_path: Path, skill_name: str, home: Path | None = None
+) -> bool:
+    """True if `link_path` is a symlink whose immediate target points to
+    ``~/.skillpod/skills/<skill_name>``.
+
+    Handles Windows ``\\\\?\\`` extended-length path prefix and macOS ``/private``
+    aliasing the same way as :func:`is_managed_fanout`.
+    """
+    if not link_path.is_symlink():
+        return False
+    raw_str = os.readlink(link_path)
+    if raw_str.startswith("\\\\?\\"):
+        raw_str = raw_str[4:]
+    raw = Path(raw_str)
+    immediate = raw if raw.is_absolute() else (link_path.parent / raw)
+    try:
+        parent_canonical = immediate.parent.resolve(strict=False)
+    except OSError:
+        return False
+    leaf_full = parent_canonical / immediate.name
+    target = global_skill_dir(skill_name, home)
+    try:
+        target_canonical = target.parent.resolve(strict=False) / target.name
+    except OSError:
+        return False
+    return leaf_full == target_canonical
+
+
 def is_managed_fanout(link_path: Path, project_root: Path) -> bool:
     """True if `link_path` is a symlink whose *immediate* target points
     inside `<project_root>/.skillpod/skills/`.
@@ -81,5 +110,6 @@ __all__ = [
     "global_skill_dir",
     "install_root",
     "is_managed_fanout",
+    "is_managed_global_fanout",
     "project_skill_dir",
 ]

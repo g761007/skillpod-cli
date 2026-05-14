@@ -8,14 +8,13 @@ flows can re-materialise it as a managed global skill.
 
 from __future__ import annotations
 
-import os
 import shutil
 from pathlib import Path
 from typing import cast
 
 from skillpod.cli._output import emit, fail
 from skillpod.cli.commands.global_list import GlobalSkill, scan_global_skills
-from skillpod.installer.paths import global_install_root, global_skill_dir
+from skillpod.installer.paths import global_install_root, global_skill_dir, is_managed_global_fanout
 from skillpod.lockfile.integrity import hash_directory
 
 
@@ -31,26 +30,11 @@ def _is_inside(path: Path, parent: Path) -> bool:
     return True
 
 
-def _points_into(link: Path, target_dir: Path) -> bool:
-    """True if `link` is a symlink whose immediate target equals `target_dir`."""
-    if not link.is_symlink():
-        return False
-    raw = Path(os.readlink(link))
-    immediate = raw if raw.is_absolute() else (link.parent / raw)
-    try:
-        leaf = immediate.parent.resolve(strict=False) / immediate.name
-        target = target_dir.parent.resolve(strict=False) / target_dir.name
-    except OSError:
-        return False
-    return leaf == target
-
-
 def _is_skillpod_link_managed(skill_name: str, matches: list[Path]) -> bool:
     """True when ~/.skillpod/skills/<name> exists and every agent copy points to it."""
-    dest = global_skill_dir(skill_name)
-    if not dest.is_dir():
+    if not global_skill_dir(skill_name).is_dir():
         return False
-    return all(_points_into(p, dest) for p in matches)
+    return all(is_managed_global_fanout(p, skill_name) for p in matches)
 
 
 def _archive_skill_core(
@@ -73,7 +57,7 @@ def _archive_skill_core(
     fanout_links: list[Path] = []
     content_sources: list[Path] = []
     for path in matches:
-        if _points_into(path, dest):
+        if is_managed_global_fanout(path, skill_name):
             fanout_links.append(path)
         else:
             content_sources.append(path)

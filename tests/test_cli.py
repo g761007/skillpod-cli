@@ -835,7 +835,7 @@ def test_global_list_against_fake_home(
     (tmp_path / ".claude" / "skills" / "audit").mkdir(parents=True)
     (tmp_path / ".codex" / "skills" / "polish").mkdir(parents=True)
 
-    result = runner.invoke(app, ["global", "list", "--json"])
+    result = runner.invoke(app, ["global", "list", "--agents", "--json"])
 
     assert result.exit_code == 0, result.stdout + result.stderr
     payload = json.loads(result.stdout)
@@ -1154,6 +1154,217 @@ def test_global_doctor_flags_broken_symlink(
     assert result.exit_code == 1
     payload = json.loads(result.stdout)
     assert any(f["code"] == "broken-global-symlink" for f in payload["findings"])
+
+
+# ---- global list (install-root view) ----------------------------------------
+
+
+def test_global_list_defaults_to_install_root(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    (tmp_path / ".skillpod" / "skills" / "foo").mkdir(parents=True)
+    (tmp_path / ".claude" / "skills" / "bar").mkdir(parents=True)
+
+    result = runner.invoke(app, ["global", "list", "--json"])
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    names = {row["name"] for row in payload}
+    assert names == {"foo"}
+    assert "bar" not in names
+    assert all({"name", "path", "size_bytes", "mtime", "linked"} <= set(row) for row in payload)
+
+
+def test_global_list_shows_linked_agents(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    install_root = tmp_path / ".skillpod" / "skills" / "foo"
+    install_root.mkdir(parents=True)
+    claude_link = tmp_path / ".claude" / "skills" / "foo"
+    claude_link.parent.mkdir(parents=True)
+    claude_link.symlink_to(install_root)
+
+    result = runner.invoke(app, ["global", "list", "--json"])
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert len(payload) == 1
+    assert payload[0]["name"] == "foo"
+    assert payload[0]["linked"] == ["claude"]
+
+
+def test_global_list_agents_view_is_per_agent(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    (tmp_path / ".claude" / "skills" / "alpha").mkdir(parents=True)
+    (tmp_path / ".gemini" / "skills" / "beta").mkdir(parents=True)
+
+    result = runner.invoke(app, ["global", "list", "--agents", "--json"])
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert {(row["agent"], row["name"]) for row in payload} == {
+        ("claude", "alpha"),
+        ("gemini", "beta"),
+    }
+
+
+# ---- global link -------------------------------------------------------------
+
+
+def test_global_link_creates_symlinks(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    install_root = tmp_path / ".skillpod" / "skills" / "foo"
+    install_root.mkdir(parents=True)
+    (install_root / "SKILL.md").write_text("# foo", encoding="utf-8")
+
+    result = runner.invoke(app, ["global", "link", "foo", "--agent", "codex", "--json"])
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is True
+    assert payload["linked"] == ["codex"]
+    assert payload["already_linked"] == []
+    assert payload["failed"] == []
+    link = tmp_path / ".codex" / "skills" / "foo"
+    assert link.is_symlink()
+    assert link.resolve() == install_root.resolve()
+
+
+def test_global_link_defaults_to_all_agents(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    install_root = tmp_path / ".skillpod" / "skills" / "foo"
+    install_root.mkdir(parents=True)
+
+    result = runner.invoke(app, ["global", "link", "foo", "--json"])
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is True
+    assert len(payload["linked"]) > 1
+    assert "claude" in payload["linked"]
+    assert "codex" in payload["linked"]
+
+
+def test_global_link_fails_when_install_root_missing(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    result = runner.invoke(app, ["global", "link", "no-such-skill", "--agent", "codex"])
+
+    assert result.exit_code == 1
+    assert "no-such-skill" in (result.stdout + result.stderr)
+
+
+def test_global_link_already_linked_is_idempotent(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    install_root = tmp_path / ".skillpod" / "skills" / "foo"
+    install_root.mkdir(parents=True)
+    claude_link = tmp_path / ".claude" / "skills" / "foo"
+    claude_link.parent.mkdir(parents=True)
+    claude_link.symlink_to(install_root)
+
+    result = runner.invoke(app, ["global", "link", "foo", "--agent", "claude", "--json"])
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is True
+    assert payload["already_linked"] == ["claude"]
+    assert payload["linked"] == []
+
+
+def test_global_link_skips_unmanaged_without_yes(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    install_root = tmp_path / ".skillpod" / "skills" / "foo"
+    install_root.mkdir(parents=True)
+    gemini_conflict = tmp_path / ".gemini" / "skills" / "foo"
+    gemini_conflict.mkdir(parents=True)
+    (gemini_conflict / "other.md").write_text("# other", encoding="utf-8")
+
+    result = runner.invoke(
+        app, ["global", "link", "foo", "--agent", "claude", "--agent", "gemini", "--json"]
+    )
+
+    payload = json.loads(result.stdout)
+    assert "claude" in payload["linked"]
+    assert any(item["agent"] == "gemini" for item in payload["failed"])
+    claude_link = tmp_path / ".claude" / "skills" / "foo"
+    assert claude_link.is_symlink()
+    assert (gemini_conflict / "other.md").exists()
+
+
+# ---- global unlink -----------------------------------------------------------
+
+
+def test_global_unlink_removes_managed_symlinks(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    install_root = tmp_path / ".skillpod" / "skills" / "foo"
+    install_root.mkdir(parents=True)
+    for agent in ("claude", "codex"):
+        link = tmp_path / f".{agent}" / "skills" / "foo"
+        link.parent.mkdir(parents=True)
+        link.symlink_to(install_root)
+
+    result = runner.invoke(app, ["global", "unlink", "foo", "--json"])
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert set(payload["unlinked"]) >= {"claude", "codex"}
+    assert not (tmp_path / ".claude" / "skills" / "foo").exists()
+    assert not (tmp_path / ".codex" / "skills" / "foo").exists()
+    assert install_root.is_dir()
+
+
+def test_global_unlink_specific_agent(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    install_root = tmp_path / ".skillpod" / "skills" / "foo"
+    install_root.mkdir(parents=True)
+    for agent in ("claude", "codex"):
+        link = tmp_path / f".{agent}" / "skills" / "foo"
+        link.parent.mkdir(parents=True)
+        link.symlink_to(install_root)
+
+    result = runner.invoke(app, ["global", "unlink", "foo", "--agent", "codex", "--json"])
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["unlinked"] == ["codex"]
+    assert not (tmp_path / ".codex" / "skills" / "foo").exists()
+    assert (tmp_path / ".claude" / "skills" / "foo").is_symlink()
+
+
+def test_global_unlink_skips_unmanaged(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    install_root = tmp_path / ".skillpod" / "skills" / "foo"
+    install_root.mkdir(parents=True)
+    unmanaged = tmp_path / ".gemini" / "skills" / "foo"
+    unmanaged.mkdir(parents=True)
+
+    result = runner.invoke(app, ["global", "unlink", "foo", "--agent", "gemini", "--json"])
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["unlinked"] == []
+    assert str(unmanaged) in payload["skipped_unmanaged"]
+    assert unmanaged.is_dir()
 
 
 # ---- adapter list -----------------------------------------------------------
