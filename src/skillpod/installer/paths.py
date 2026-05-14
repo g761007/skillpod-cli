@@ -7,6 +7,7 @@ from pathlib import Path
 
 PROJECT_INSTALL_ROOT = ".skillpod/skills"
 GLOBAL_INSTALL_ROOT_REL = ".skillpod/skills"
+GLOBAL_PROFILES_REL = ".skillpod/profiles"
 
 
 def project_skill_dir(project_root: Path, skill_name: str) -> Path:
@@ -27,6 +28,17 @@ def global_install_root(home: Path | None = None) -> Path:
     """Return `~/.skillpod/skills/` (or `<home>/.skillpod/skills` for tests)."""
     base = (home or Path.home()).expanduser()
     return base / GLOBAL_INSTALL_ROOT_REL
+
+
+def global_profiles_root(home: Path | None = None) -> Path:
+    """Return `~/.skillpod/profiles/` (or `<home>/.skillpod/profiles` for tests)."""
+    base = (home or Path.home()).expanduser()
+    return base / GLOBAL_PROFILES_REL
+
+
+def global_profile_path(name: str, home: Path | None = None) -> Path:
+    """Return `~/.skillpod/profiles/<name>.yml`."""
+    return global_profiles_root(home) / f"{name}.yml"
 
 
 def global_skill_dir(skill_name: str, home: Path | None = None) -> Path:
@@ -103,10 +115,13 @@ def is_managed_fanout(link_path: Path, project_root: Path) -> bool:
 
 __all__ = [
     "GLOBAL_INSTALL_ROOT_REL",
+    "GLOBAL_PROFILES_REL",
     "PROJECT_INSTALL_ROOT",
     "agent_skill_dir",
     "global_agent_skill_dir",
     "global_install_root",
+    "global_profile_path",
+    "global_profiles_root",
     "global_skill_dir",
     "install_root",
     "is_managed_fanout",

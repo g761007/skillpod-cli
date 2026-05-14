@@ -515,3 +515,77 @@ def test_agents_unknown_field_in_object_form_rejected() -> None:
                 skills: []
             """)
         )
+
+
+# ---- ProfileEntry / profiles field ------------------------------------------
+
+
+def test_profile_entry_parsed_in_manifest() -> None:
+    manifest = loads(
+        textwrap.dedent("""
+            version: 1
+            skills:
+              - audit
+              - review
+            agents:
+              - claude
+            profiles:
+              reviewer:
+                type: role
+                agents: [claude]
+                skills: [audit, review]
+        """)
+    )
+    assert "reviewer" in manifest.profiles
+    p = manifest.profiles["reviewer"]
+    assert p.type == "role"
+    assert p.agents == ["claude"]
+    assert p.skills == ["audit", "review"]
+
+
+def test_profile_invalid_name_rejected() -> None:
+    with pytest.raises(ManifestError, match="invalid"):
+        loads(
+            textwrap.dedent("""
+                version: 1
+                profiles:
+                  "bad name!": {}
+            """)
+        )
+
+
+def test_profile_unknown_agent_rejected() -> None:
+    with pytest.raises(ManifestError, match="unknown agent"):
+        loads(
+            textwrap.dedent("""
+                version: 1
+                agents: [claude]
+                profiles:
+                  reviewer:
+                    agents: [claude, nonexistent]
+            """)
+        )
+
+
+def test_profile_duplicate_skills_rejected() -> None:
+    with pytest.raises(ManifestError, match="duplicate"):
+        loads(
+            textwrap.dedent("""
+                version: 1
+                profiles:
+                  reviewer:
+                    skills: [audit, audit]
+            """)
+        )
+
+
+def test_profile_empty_body_accepted() -> None:
+    manifest = loads(
+        textwrap.dedent("""
+            version: 1
+            profiles:
+              reviewer: {}
+        """)
+    )
+    assert manifest.profiles["reviewer"].skills == []
+    assert manifest.profiles["reviewer"].agents == []

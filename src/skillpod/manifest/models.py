@@ -11,9 +11,12 @@ as part of `add-skillpod-trust-and-search` (Roadmap 0.2.0).
 
 from __future__ import annotations
 
+import re
 from typing import Annotated, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+_PROFILE_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 SUPPORTED_AGENTS: tuple[str, ...] = (
     "claude",
@@ -137,6 +140,26 @@ class InstallPolicy(_StrictModel):
     )
 
 
+class ProfileEntry(_StrictModel):
+    """One named profile under `profiles:` in skillfile.yml.
+
+    In filter mode (v0.6.x), ``skills`` must reference names already declared
+    in the project's skill set.  ``type`` is display-only and does not affect
+    resolution behaviour.
+    """
+
+    type: str | None = None
+    agents: list[str] = Field(default_factory=list)
+    skills: list[str] = Field(default_factory=list)
+
+    @field_validator("skills", "agents")
+    @classmethod
+    def _items_unique(cls, value: list[str]) -> list[str]:
+        if len(set(value)) != len(value):
+            raise ValueError("duplicate entries")
+        return value
+
+
 class Skillfile(_StrictModel):
     """Top-level model for skillfile.yml v1."""
 
@@ -148,6 +171,7 @@ class Skillfile(_StrictModel):
     skills: list[SkillEntry] = Field(default_factory=list)
     groups: dict[str, list[SkillRef]] = Field(default_factory=dict)
     use: list[str] = Field(default_factory=list)
+    profiles: dict[str, ProfileEntry] = Field(default_factory=dict)
 
     @field_validator("agents")
     @classmethod
@@ -189,6 +213,21 @@ class Skillfile(_StrictModel):
             raise ValueError("use list contains duplicates")
         return value
 
+    @field_validator("profiles")
+    @classmethod
+    def _profile_names_valid(
+        cls, value: dict[str, ProfileEntry]
+    ) -> dict[str, ProfileEntry]:
+        for name in value:
+            if not name:
+                raise ValueError("profiles contain an empty name")
+            if not _PROFILE_NAME_RE.match(name):
+                raise ValueError(
+                    f"profile name '{name}' is invalid; "
+                    "use only letters, digits, hyphens, and underscores"
+                )
+        return value
+
     @model_validator(mode="after")
     def _cross_check(self) -> Skillfile:
         skill_names = [s.name for s in self.skills]
@@ -215,6 +254,16 @@ class Skillfile(_StrictModel):
             raise ValueError(
                 "group/skill name collision: " + ", ".join(repr(name) for name in collisions)
             )
+
+        agent_names = {a.name for a in self.agents}
+        for profile_name, profile in self.profiles.items():
+            unknown_agents = [a for a in profile.agents if a not in agent_names]
+            if unknown_agents:
+                raise ValueError(
+                    f"profile '{profile_name}': references unknown agent(s): "
+                    + ", ".join(repr(a) for a in unknown_agents)
+                )
+
         return self
 
 
@@ -222,6 +271,7 @@ __all__ = [
     "SUPPORTED_AGENTS",
     "AgentEntry",
     "InstallPolicy",
+    "ProfileEntry",
     "RegistryConfig",
     "RegistrySkillsShPolicy",
     "SkillEntry",
