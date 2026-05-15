@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import typer
+
 from skillpod.cli._output import emit, run_with_exit_codes
 from skillpod.manifest.loader import ManifestError, load
 from skillpod.profile.io import list_global_profiles, list_project_profiles
@@ -18,6 +20,7 @@ def run(
     json_output: bool,
     profile_name: str | None,
     home: Path | None = None,
+    ignore_global: bool = False,
 ) -> None:
     def _run() -> None:
         try:
@@ -44,11 +47,17 @@ def run(
 
         project_name = project_root.name
         project_profiles = list_project_profiles(manifest)
+        act = manifest.activation
 
         payload = {
             "project": project_name,
             "manifest": str(manifest_path),
             "skills": len(manifest.skills),
+            "activation": {
+                "mode": act.mode,
+                "inherit_global": act.inherit_global,
+                "default_profile": act.default_profile,
+            },
             "profiles": {
                 "project": project_profiles,
                 "global": global_profiles,
@@ -56,9 +65,10 @@ def run(
         }
 
         human_lines = [
-            f"project:   {project_name}",
-            f"manifest:  {manifest_path}",
-            f"skills:    {len(manifest.skills)}",
+            f"project:    {project_name}",
+            f"manifest:   {manifest_path}",
+            f"skills:     {len(manifest.skills)}",
+            f"activation: {act.mode} / inherit_global={str(act.inherit_global).lower()}",
             "",
             "profiles:",
         ]
@@ -71,8 +81,14 @@ def run(
 
         if profile_name is not None:
             effective = compose_effective_skillset(
-                manifest, project_root, profile_name=profile_name, home=home
+                manifest,
+                project_root,
+                profile_name=profile_name,
+                home=home,
+                ignore_global=ignore_global,
             )
+            for w in effective.warnings:
+                typer.echo(f"warning: {w}", err=True)
             payload["active_profile"] = profile_name
             payload["effective_skills"] = [s.name for s in effective.skills]
             human_lines += [

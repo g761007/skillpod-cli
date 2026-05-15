@@ -98,6 +98,14 @@ def _normalise_profiles(raw: Any) -> dict[str, Any]:
     return result
 
 
+def _normalise_activation(raw: Any) -> dict[str, Any]:
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise ManifestError(f"`activation:` must be a mapping, got {type(raw).__name__}")
+    return raw
+
+
 def loads(text: str) -> Skillfile:
     """Parse manifest YAML text into a `Skillfile`."""
     try:
@@ -120,6 +128,8 @@ def loads(text: str) -> Skillfile:
         data["agents"] = _normalise_agents(data["agents"])
     if "profiles" in data:
         data["profiles"] = _normalise_profiles(data["profiles"])
+    if "activation" in data:
+        data["activation"] = _normalise_activation(data["activation"])
 
     try:
         return Skillfile.model_validate(data)
