@@ -13,7 +13,7 @@
 </p>
 
 > **Pod-style dependency manager for AI coding agent skills.**
-> One declarative manifest, multi-agent fan-out.
+> One declarative manifest, multi-agent fan-out, switchable workspace profiles.
 
 `skillpod` brings the `package.json` + lockfile workflow to AI agent skills.
 Declare which skills your project depends on, lock them to a specific git
@@ -21,8 +21,12 @@ commit, then materialise them once into `.skillpod/skills/` and fan them out
 to every agent you use — Claude Code, Codex, Gemini, Cursor, OpenCode,
 Antigravity.
 
+Need different skills for code review vs. frontend work? Define **workspace
+profiles** and switch context per terminal, role, or project — no manifest
+edits, no reinstalls. Each shell can run a different profile in parallel.
+
 ```
-discover → resolve → lock → install
+discover → resolve → lock → install → activate (profile)
 ```
 
 ---
@@ -35,6 +39,7 @@ discover → resolve → lock → install
 | Agents drift from each other        | One source of truth → symlink/copy/hardlink fan-out      |
 | "Works on my machine"               | `skillfile.lock` pins git commit + sha256                |
 | Untrusted skills land silently      | Trust policy (`min_installs`, `min_stars`, `verified`)   |
+| One huge skill set bleeds into every task | Workspace profiles filter skills/agents per role, session, or terminal |
 
 > **skills.sh = discovery layer. skillpod = dependency system.**
 
