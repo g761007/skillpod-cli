@@ -340,20 +340,25 @@ IDEs can use this schema for autocomplete and validation.
 
 ## Commands
 
-| Command              | What it does                                                             |
-| -------------------- | ------------------------------------------------------------------------ |
-| `skillpod init`      | Bootstrap a new `skillfile.yml` in the current directory                 |
-| `skillpod install`   | Install every skill declared in the manifest                             |
-| `skillpod add`       | Add a skill to the manifest and install it                               |
-| `skillpod remove`    | Remove a skill from the manifest and uninstall it                        |
-| `skillpod list`      | List installed skills and their resolved sources                         |
-| `skillpod sync`      | Re-create fan-out entries from the lockfile without re-resolving         |
-| `skillpod search`    | Search the registry for skills matching a query                          |
-| `skillpod outdated`  | Show which locked skills have drifted from upstream                      |
-| `skillpod update`    | Re-resolve and refresh skills in the lockfile                            |
-| `skillpod doctor`    | Verify manifest / lockfile / symlink consistency                         |
-| `skillpod global`    | Manage global skills: list, link/unlink to agents, consolidate, audit   |
-| `skillpod adapter`   | Inspect the active adapter registry                                      |
+| Command                     | What it does                                                             |
+| --------------------------- | ------------------------------------------------------------------------ |
+| `skillpod init`             | Bootstrap a new `skillfile.yml` in the current directory                 |
+| `skillpod install`          | Install every skill declared in the manifest                             |
+| `skillpod add`              | Add a skill to the manifest and install it                               |
+| `skillpod remove`           | Remove a skill from the manifest and uninstall it                        |
+| `skillpod list`             | List installed skills and their resolved sources                         |
+| `skillpod sync`             | Re-create fan-out entries from the lockfile without re-resolving         |
+| `skillpod search`           | Search the registry for skills matching a query                          |
+| `skillpod outdated`         | Show which locked skills have drifted from upstream                      |
+| `skillpod update`           | Re-resolve and refresh skills in the lockfile                            |
+| `skillpod doctor`           | Verify manifest / lockfile / symlink consistency                         |
+| `skillpod status`           | Show project status, active profile, and shell session depth             |
+| `skillpod resolve`          | Resolve the effective skill set with optional profile filter and explain |
+| `skillpod switch`           | Set the active profile for the current scope                             |
+| `skillpod shell <profile>`  | Start a sub-shell with a profile pre-activated                           |
+| `skillpod profile`          | Manage workspace profiles (create, list, show, add, remove, diff, export, import) |
+| `skillpod global`           | Manage global skills: list, link/unlink to agents, consolidate, audit   |
+| `skillpod adapter`          | Inspect the active adapter registry                                      |
 
 `--help` on any subcommand shows full options. `--json` produces
 machine-readable output where it makes sense.
@@ -429,6 +434,154 @@ skillpod global archive '*' --json
 
 ---
 
+## Workspace Profiles (v0.6.x)
+
+Workspace profiles let you switch your AI coding context without editing
+`skillfile.yml`. A profile is a named filter that selects which skills and
+agents are active for a given session, role, or project.
+
+### Defining a profile
+
+Add a `profiles:` block to `skillfile.yml`:
+
+```yaml
+profiles:
+  reviewer:
+    type: role
+    skills: [code-review, audit]
+    agents: [claude, codex]
+
+  frontend:
+    type: project
+    skills: [react-patterns, css-audit]
+    agents: [claude]
+```
+
+Create and manage profiles from the CLI:
+
+```bash
+skillpod profile create reviewer --type role
+skillpod profile add reviewer code-review
+skillpod profile add reviewer audit
+skillpod profile list
+skillpod profile show reviewer
+```
+
+### Activating a profile
+
+**Per-command** (no persistent state):
+
+```bash
+skillpod resolve --profile reviewer
+skillpod status --profile reviewer
+```
+
+**Project-scoped** (persists in `.skillpod/active-profile`):
+
+```bash
+skillpod switch reviewer                     # default: project scope
+skillpod profile current                     # → reviewer (project)
+```
+
+**Global** (persists in `~/.skillpod/active-profile`, affects all projects):
+
+```bash
+skillpod switch reviewer --scope global --global
+```
+
+**Session-scoped** (env var only, no files written):
+
+```bash
+eval "$(skillpod switch reviewer --scope session)"
+echo $SKILLPOD_ACTIVE_PROFILE   # → reviewer
+```
+
+Once a profile is active, all commands (`resolve`, `install`, `sync`, `status`)
+automatically use it — no `--profile` flag needed.
+
+### Sub-shell sessions (`skillpod shell`)
+
+`skillpod shell <profile>` spawns `$SHELL` with the profile pre-activated.
+Each terminal can run a different profile simultaneously:
+
+```bash
+# Terminal A
+skillpod shell reviewer
+echo $SKILLPOD_ACTIVE_PROFILE   # → reviewer
+# PS1 is prefixed: [skillpod:reviewer] $
+
+# Terminal B (simultaneously)
+skillpod shell frontend
+echo $SKILLPOD_ACTIVE_PROFILE   # → frontend
+```
+
+The parent shell's environment is never mutated. Exit the sub-shell to
+return to the unfiltered context. Nesting (`skillpod shell` inside a
+`skillpod shell`) is blocked — exit the inner shell first.
+
+### Activation policy
+
+Control how project and global profiles interact in `skillfile.yml`:
+
+```yaml
+activation:
+  mode: strict           # strict | merge | fallback | manual (default)
+  inherit_global: true   # set false to ignore ~/.skillpod/profiles/
+  default_profile: reviewer  # activated automatically when no --profile is passed
+```
+
+| Mode       | Behaviour |
+| ---------- | --------- |
+| `manual`   | Profile applied only when explicitly requested; global profiles used as fallback |
+| `strict`   | Only project-defined profiles accepted; global profiles blocked |
+| `merge`    | Union of project + global skills and agents; project wins on conflict |
+| `fallback` | Project profile first; falls back to global if not found in project |
+
+### Profile composition (experimental)
+
+Combine profiles with `+` to activate the union of their skills and agents:
+
+```bash
+# Session-scope only (composition cannot be persisted to files)
+eval "$(skillpod switch reviewer+frontend --scope session)"
+
+skillpod resolve   # union of reviewer + frontend skills
+```
+
+A warning is printed on first use:
+`warning: profile composition is experimental — semantics may change in v0.7.x`
+
+Suppress with `SKILLPOD_DISABLE_EXPERIMENTAL_WARNING=1`.
+
+### Profile diff, export, and import
+
+```bash
+# Compare two profiles
+skillpod profile diff reviewer frontend
+# + code-review
+# + audit
+# - react-patterns
+#   (common skills shown with indent)
+
+# Export a profile to share with teammates
+skillpod profile export reviewer --out reviewer.yml
+
+# Import on another machine (or rename on import)
+skillpod profile import reviewer.yml
+skillpod profile import reviewer.yml --rename reviewer-strict --global
+```
+
+### Provenance (`--explain`)
+
+```bash
+skillpod resolve --profile reviewer --explain --json | jq .
+```
+
+Each skill in the output includes a `"layer"` field: `project`, `user_skill`,
+`profile_filter`, or `global_profile_filter`.
+
+---
+
 ## Roadmap & status
 
 | Milestone | Status      | Highlights                                                  |
@@ -445,7 +598,11 @@ skillpod global archive '*' --json
 | 0.5.5     | shipped     | `skillpod add owner/repo` auto-detects the remote's default branch (no longer hardcodes `main`) |
 | 0.5.6     | shipped     | browser tree URL subpath support; `global archive` batch/wildcard mode; global add no longer fans out |
 | 0.5.7     | shipped     | `global list` defaults to `~/.skillpod/skills/` view with LINKED column; new `global link` / `global unlink` / `--verbose` |
-| 0.6.x     | preview     | Workspace Profiles — reusable AI working contexts with project isolation, safe switching, session shell, and composition |
+| 0.6.0     | shipped     | Workspace Profiles core — `profiles:` in manifest, `profile create/list/show/add/remove`, `resolve --profile` |
+| 0.6.1     | shipped     | Project Isolation — `activation.mode` (strict/merge/fallback/manual), `inherit_global`, `default_profile` |
+| 0.6.2     | shipped     | Safe Switching — `switch`, `profile use/current`, scoped state (`SKILLPOD_ACTIVE_PROFILE` env > project file > global file) |
+| 0.6.3     | shipped     | Session Shell — `skillpod shell <profile>` spawns `$SHELL` with profile pre-activated, nest guard, PS1 prefix |
+| 0.6.4     | shipped     | Composition Preview — `+` operator unions profiles; `profile diff/export/import` |
 | 0.7.0     | planned     | Profile model beta — schema + resolver precedence + activation scope stable |
 | 0.8.0     | planned     | Local-first visual management UI (`skillpod ui`)            |
 | 1.0.0     | planned     | schema freeze                                               |

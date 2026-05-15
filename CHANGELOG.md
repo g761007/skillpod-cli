@@ -7,6 +7,114 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.4] — 2026-05-15
+
+### Added
+
+- **Profile composition (`+` operator, experimental)** — `skillpod switch dev+reviewer --scope session`
+  activates the union of two profiles in a single command. Skills and agents are merged
+  left-to-right with deduplication.
+  - `parse_profile_expr("dev+reviewer")` → `["dev", "reviewer"]` (public helper in `skillpod.skillset.compose`).
+  - First use emits a one-time stderr warning: `warning: profile composition is experimental — semantics may change in v0.7.x`.
+    Suppress with `SKILLPOD_DISABLE_EXPERIMENTAL_WARNING=1`.
+  - Composition expressions are **session-scope only** — passing `--scope project` or `--scope global` raises an error.
+- **`skillpod profile diff <a> <b>`** — shows added / removed / common skills between two profiles.
+  `+` prefix for added, `-` for removed, two-space indent for common. `--json` emits `{"added", "removed", "common"}`.
+- **`skillpod profile export <name> [--out FILE]`** — exports a profile to a self-contained YAML file
+  with a `skillpod_profile_export` header and `exported_at` / `source_scope` metadata.
+  Prints to stdout when `--out` is omitted.
+- **`skillpod profile import <file> [--global] [--rename NAME]`** — imports an exported profile.
+  Project scope writes to `.skillpod/imported/<name>.yml`; global scope writes to `~/.skillpod/profiles/<name>.yml`.
+  Both locations are auto-discovered by the profile resolver. `--rename` overrides the embedded name.
+
+### Internal
+
+- 27 new tests (composition engine, profile diff, export/import round-trips, CLI integration); 407 passed, 1 skipped.
+- `mypy --strict` clean across 79 files.
+
+## [0.6.3] — 2026-05-15
+
+### Added
+
+- **`skillpod shell <profile>`** — spawns `$SHELL` (fallback `/bin/sh`) with the named profile
+  pre-activated as environment variables. No state files; env is process-local so multiple terminals
+  can each run different profiles simultaneously.
+  - Sets `SKILLPOD_ACTIVE_PROFILE=<name>` and `SKILLPOD_SHELL_DEPTH=1` in the child env.
+  - Prefixes `PS1` and `PROMPT` with `[skillpod:<profile>] ` for visual context.
+  - **Nest guard**: running `skillpod shell` inside an existing shell session (`SKILLPOD_SHELL_DEPTH > 0`) exits with an error — exit the inner shell first.
+  - Profile is validated before spawning; unknown profiles raise an error (exit 1).
+- **`skillpod status`** now shows `shell session: active (depth=N)` when executed inside a `skillpod shell` session. JSON output gains `"shell_session": {"active": true, "depth": N}`.
+
+### Internal
+
+- 6 new tests (env building, nest guard, unknown profile, executable, PS1 prefix, CLI guard); 380 passed, 1 skipped.
+
+## [0.6.2] — 2026-05-15
+
+### Added
+
+- **`skillpod switch <profile> [--scope project|global|session]`** — set the active profile
+  without passing `--profile` to every command.
+  - `--scope project` (default when inside a project): writes `.skillpod/active-profile`.
+  - `--scope global`: writes `~/.skillpod/active-profile`. Requires explicit `--global` confirm flag when run from inside a project root to prevent accidental global mutations.
+  - `--scope session`: prints `export SKILLPOD_ACTIVE_PROFILE=<name>` to stdout (eval in your shell: `eval "$(skillpod switch <name> --scope session)"`).
+- **`skillpod profile use <profile>`** — alias for `skillpod switch`.
+- **`skillpod profile current`** — print the currently active profile and its scope. JSON: `{"active_profile": <name>, "scope": <scope>}` or `null` when none is set.
+- **State layer system** (`skillpod.state`): active profile priority is `SKILLPOD_ACTIVE_PROFILE` env var > `.skillpod/active-profile` (project) > `~/.skillpod/active-profile` (global).
+- **`compose_effective_skillset`** auto-reads state active profile when `--profile` is not passed. Full priority chain: CLI `--profile` > state active > `activation.default_profile` > none.
+- **`skillpod status`** always shows `active profile: NAME (scope: SCOPE)` (or `(none)`). JSON gains `"active_profile": {"name": ..., "scope": ...}` and renames the old `"active_profile"` string field to `"profile_filter"`.
+
+### Internal
+
+- `src/skillpod/state/` package: `read_active_profile`, `write_active_profile`, `clear_active_profile`.
+- 14 new state tests + 8 new CLI tests; 374 passed, 1 skipped.
+
+## [0.6.1] — 2026-05-14
+
+### Added
+
+- **`activation.mode`** field in `skillfile.yml` — controls how project and global profiles interact:
+  - `manual` (default): profile is applied only when explicitly requested; global profiles eligible as fallback.
+  - `strict`: only project-defined profiles accepted; global profiles blocked entirely.
+  - `merge`: union of project and global profile skills/agents; project wins on conflict.
+  - `fallback`: project profile first; falls back to global profile if not found in project.
+- **`activation.inherit_global`** (bool, default `true`): when `false`, global profile look-up is skipped regardless of mode.
+- **`activation.default_profile`** (string, optional): profile activated automatically when no `--profile` flag is passed.
+- Cross-check validators in `Skillfile`: profiles that reference unknown agents or unknown skills are rejected at load time.
+
+### Internal
+
+- `ActivationPolicy` Pydantic model; extended `_apply_activation_policy` in `compose_effective_skillset`.
+- Fixture directories `tests/fixtures/multi_project_a/` and `tests/fixtures/multi_project_b/` for isolation tests.
+
+## [0.6.0] — 2026-05-14
+
+### Added
+
+- **`profiles:` section in `skillfile.yml`** — define named working contexts that filter which skills and agents are active:
+  ```yaml
+  profiles:
+    reviewer:
+      type: role
+      skills: [code-review, audit]
+      agents: [claude, codex]
+  ```
+- **`skillpod profile create <name> [--type role|project|team|custom]`** — create a new empty profile.
+- **`skillpod profile list [--global] [--json]`** — list all profiles (project and/or global).
+- **`skillpod profile show <name> [--global]`** — display a profile's type, skills, and agents.
+- **`skillpod profile add <profile> <skill>`** — add a skill reference to a profile.
+- **`skillpod profile remove <profile> <skill>`** — remove a skill reference from a profile.
+- **`skillpod resolve --profile <name>`** — resolve the effective skill set with a profile filter applied.
+- **`skillpod resolve --explain`** — show per-skill provenance (project / user_skill / profile_filter / global_profile_filter).
+- **`skillpod status --profile <name>`** — show status filtered to a specific profile.
+- Global profile storage under `~/.skillpod/profiles/<name>.yml` (auto-created by `profile create --global`).
+
+### Internal
+
+- `src/skillpod/profile/` package: `ProfileEntry` model, `get_project_profile`, `load_global_profile`, `ProfileError`.
+- `src/skillpod/skillset/` package: `compose_effective_skillset`, `EffectiveSkillset`, `LayerOrigin`.
+- JSON Schema regenerated for v0.6.0 models.
+
 ## [0.5.7] — 2026-05-14
 
 ### Added
@@ -326,7 +434,12 @@ required to publish.
 - pytest suite covering manifest, lockfile, source resolution, installer,
   and CLI smoke tests.
 
-[Unreleased]: https://github.com/g761007/skillpod-cli/compare/v0.5.7...HEAD
+[Unreleased]: https://github.com/g761007/skillpod-cli/compare/v0.6.4...HEAD
+[0.6.4]: https://github.com/g761007/skillpod-cli/compare/v0.6.3...v0.6.4
+[0.6.3]: https://github.com/g761007/skillpod-cli/compare/v0.6.2...v0.6.3
+[0.6.2]: https://github.com/g761007/skillpod-cli/compare/v0.6.1...v0.6.2
+[0.6.1]: https://github.com/g761007/skillpod-cli/compare/v0.6.0...v0.6.1
+[0.6.0]: https://github.com/g761007/skillpod-cli/compare/v0.5.7...v0.6.0
 [0.5.7]: https://github.com/g761007/skillpod-cli/compare/v0.5.6...v0.5.7
 [0.5.6]: https://github.com/g761007/skillpod-cli/compare/v0.5.5...v0.5.6
 [0.5.5]: https://github.com/g761007/skillpod-cli/releases/tag/v0.5.5
