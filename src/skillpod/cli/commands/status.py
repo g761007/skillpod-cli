@@ -11,6 +11,7 @@ from skillpod.cli._output import emit, run_with_exit_codes
 from skillpod.manifest.loader import ManifestError, load
 from skillpod.profile.io import list_global_profiles, list_project_profiles
 from skillpod.skillset.compose import compose_effective_skillset
+from skillpod.state.active import read_active_profile
 
 
 def run(
@@ -49,6 +50,8 @@ def run(
         project_profiles = list_project_profiles(manifest)
         act = manifest.activation
 
+        active_name, active_scope = read_active_profile(project_root, home=home)
+
         payload = {
             "project": project_name,
             "manifest": str(manifest_path),
@@ -62,6 +65,7 @@ def run(
                 "project": project_profiles,
                 "global": global_profiles,
             },
+            "active_profile": {"name": active_name, "scope": active_scope},
         }
 
         human_lines = [
@@ -79,6 +83,11 @@ def run(
         if not project_profiles and not global_profiles:
             human_lines.append("  (none)")
 
+        if active_name is not None:
+            human_lines.append(f"\nactive profile: {active_name} (scope: {active_scope})")
+        else:
+            human_lines.append("\nactive profile: (none)")
+
         if profile_name is not None:
             effective = compose_effective_skillset(
                 manifest,
@@ -89,16 +98,15 @@ def run(
             )
             for w in effective.warnings:
                 typer.echo(f"warning: {w}", err=True)
-            payload["active_profile"] = profile_name
+            payload["profile_filter"] = profile_name
             payload["effective_skills"] = [s.name for s in effective.skills]
             human_lines += [
                 "",
-                f"active profile: {profile_name}",
-                f"effective skills ({len(effective.skills)}):",
+                f"effective skills for '{profile_name}' ({len(effective.skills)}):",
             ]
             human_lines.extend(f"  {s.name}" for s in effective.skills)
         else:
-            human_lines += ["", "(pass --profile NAME to show effective skills)"]
+            human_lines.append("\n(pass --profile NAME to show effective skills)")
 
         emit(payload, json_output=json_output, human="\n".join(human_lines))
 

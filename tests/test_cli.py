@@ -1756,7 +1756,8 @@ def test_status_with_profile_shows_effective_skills(
     assert result.exit_code == 0, result.output
     data = json.loads(result.stdout)
     assert data["effective_skills"] == ["audit"]
-    assert data["active_profile"] == "reviewer"
+    assert data["profile_filter"] == "reviewer"
+    assert data["active_profile"] == {"name": None, "scope": None}
 
 
 # ---- resolve -----------------------------------------------------------------
@@ -1990,3 +1991,179 @@ def test_activation_merge_unions_skills_via_cli(
     assert result.exit_code == 0, result.output
     data = json.loads(result.stdout)
     assert sorted(data["skills"]) == ["audit", "review"]
+
+
+# ---- switch / profile current / profile use ---------------------------------
+
+
+def test_profile_current_no_active_profile(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    proj = _project(tmp_path, "version: 1\nskills:\n  - audit\n")
+
+    result = runner.invoke(
+        app,
+        ["profile", "current", "--manifest", str(proj / "skillfile.yml")],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "(none)" in result.output
+
+
+def test_profile_current_no_active_profile_json(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    proj = _project(tmp_path, "version: 1\nskills:\n  - audit\n")
+
+    result = runner.invoke(
+        app,
+        ["profile", "current", "--manifest", str(proj / "skillfile.yml"), "--json"],
+    )
+
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.stdout)
+    assert data["active_profile"] is None
+    assert data["scope"] is None
+
+
+def test_switch_project_scope_then_profile_current(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    proj = _project(
+        tmp_path,
+        "version: 1\nskills:\n  - audit\n  - review\n"
+        "profiles:\n  dev:\n    skills: [audit]\n",
+    )
+
+    switch_result = runner.invoke(
+        app,
+        ["switch", "dev", "--scope", "project", "--manifest", str(proj / "skillfile.yml")],
+    )
+    assert switch_result.exit_code == 0, switch_result.output
+
+    current_result = runner.invoke(
+        app,
+        ["profile", "current", "--manifest", str(proj / "skillfile.yml")],
+    )
+
+    assert current_result.exit_code == 0, current_result.output
+    assert "dev" in current_result.output
+    assert "project" in current_result.output
+
+
+def test_switch_session_scope_prints_export(
+    runner: CliRunner, tmp_path: Path
+) -> None:
+    proj = _project(tmp_path, "version: 1\nskills:\n  - audit\n")
+
+    result = runner.invoke(
+        app,
+        ["switch", "dev", "--scope", "session", "--manifest", str(proj / "skillfile.yml")],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "export SKILLPOD_ACTIVE_PROFILE=dev" in result.output
+
+
+def test_switch_global_inside_project_without_confirm_fails(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    proj = _project(tmp_path, "version: 1\nskills:\n  - audit\n")
+
+    result = runner.invoke(
+        app,
+        ["switch", "dev", "--scope", "global", "--manifest", str(proj / "skillfile.yml")],
+    )
+
+    assert result.exit_code == 1
+
+
+def test_switch_global_inside_project_with_confirm_succeeds(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    proj = _project(tmp_path, "version: 1\nskills:\n  - audit\n")
+
+    result = runner.invoke(
+        app,
+        [
+            "switch", "dev", "--scope", "global", "--global",
+            "--manifest", str(proj / "skillfile.yml"),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+
+
+def test_resolve_picks_up_state_active_profile(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    proj = _project(
+        tmp_path,
+        "version: 1\nskills:\n  - audit\n  - review\n"
+        "profiles:\n  reviewer:\n    skills: [audit]\n",
+    )
+    # set project-scope active profile
+    runner.invoke(
+        app,
+        ["switch", "reviewer", "--scope", "project", "--manifest", str(proj / "skillfile.yml")],
+    )
+
+    result = runner.invoke(
+        app,
+        ["resolve", "--manifest", str(proj / "skillfile.yml"), "--json"],
+    )
+
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.stdout)
+    assert data["skills"] == ["audit"]
+
+
+def test_status_shows_active_profile_from_state(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    proj = _project(tmp_path, "version: 1\nskills:\n  - audit\n")
+    runner.invoke(
+        app,
+        ["switch", "dev", "--scope", "project", "--manifest", str(proj / "skillfile.yml")],
+    )
+
+    result = runner.invoke(
+        app,
+        ["status", "--manifest", str(proj / "skillfile.yml"), "--json"],
+    )
+
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.stdout)
+    assert data["active_profile"] == {"name": "dev", "scope": "project"}
+
+
+def test_profile_use_alias_works(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    proj = _project(
+        tmp_path,
+        "version: 1\nskills:\n  - audit\n"
+        "profiles:\n  ci:\n    skills: [audit]\n",
+    )
+
+    result = runner.invoke(
+        app,
+        ["profile", "use", "ci", "--scope", "project", "--manifest", str(proj / "skillfile.yml")],
+    )
+
+    assert result.exit_code == 0, result.output
+    current = runner.invoke(
+        app,
+        ["profile", "current", "--manifest", str(proj / "skillfile.yml"), "--json"],
+    )
+    data = json.loads(current.stdout)
+    assert data["active_profile"] == "ci"
+    assert data["scope"] == "project"

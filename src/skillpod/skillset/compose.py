@@ -12,6 +12,7 @@ from skillpod.manifest.models import ActivationPolicy, ProfileEntry, SkillEntry,
 from skillpod.profile.errors import ProfileError
 from skillpod.profile.io import get_project_profile, load_global_profile
 from skillpod.skillset.layers import LayerOrigin
+from skillpod.state.active import read_active_profile
 
 
 @dataclass(frozen=True)
@@ -138,11 +139,19 @@ def compose_effective_skillset(
 ) -> EffectiveSkillset:
     """Return the effective skill list after applying manifest, user_skills, and profile.
 
-    When no profile is active (no ``--profile`` flag and no ``default_profile``
-    in the activation policy), the full combined set is returned, matching
-    pre-v0.6.0 pipeline behaviour.  The ``ignore_global`` flag forces all
+    Priority chain for profile resolution:
+    CLI --profile > state active (session > project > global) > activation.default_profile > None
+
+    When no profile is active (no ``--profile`` flag, no state active profile, and no
+    ``default_profile`` in the activation policy), the full combined set is returned,
+    matching pre-v0.6.0 pipeline behaviour.  The ``ignore_global`` flag forces all
     global profiles to be skipped, overriding ``activation.inherit_global``.
     """
+    if profile_name is None:
+        state_name, _state_scope = read_active_profile(project_root, home=home)
+        if state_name is not None:
+            profile_name = state_name
+
     flat_skills = flatten(manifest)
     user_skills: dict[str, Path] = discover_user_skills(project_root)
 
