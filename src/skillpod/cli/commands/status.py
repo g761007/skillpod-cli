@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
 import typer
 
 from skillpod.cli._output import emit, run_with_exit_codes
+from skillpod.cli.commands.shell import ENV_DEPTH
 from skillpod.manifest.loader import ManifestError, load
 from skillpod.profile.io import list_global_profiles, list_project_profiles
 from skillpod.skillset.compose import compose_effective_skillset
@@ -52,6 +54,16 @@ def run(
 
         active_name, active_scope = read_active_profile(project_root, home=home)
 
+        shell_depth_str = os.environ.get(ENV_DEPTH, "0")
+        try:
+            shell_depth = int(shell_depth_str)
+        except ValueError:
+            shell_depth = 0
+        shell_active = shell_depth > 0
+        shell_session_payload: dict[str, Any] = (
+            {"active": True, "depth": shell_depth} if shell_active else {"active": False}
+        )
+
         payload = {
             "project": project_name,
             "manifest": str(manifest_path),
@@ -66,6 +78,7 @@ def run(
                 "global": global_profiles,
             },
             "active_profile": {"name": active_name, "scope": active_scope},
+            "shell_session": shell_session_payload,
         }
 
         human_lines = [
@@ -87,6 +100,9 @@ def run(
             human_lines.append(f"\nactive profile: {active_name} (scope: {active_scope})")
         else:
             human_lines.append("\nactive profile: (none)")
+
+        if shell_active:
+            human_lines.append(f"shell session:  active (depth={shell_depth})")
 
         if profile_name is not None:
             effective = compose_effective_skillset(
