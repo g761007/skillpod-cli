@@ -366,3 +366,52 @@ def test_activation_no_warnings_in_base_only_result(tmp_path: Path) -> None:
     result = compose_effective_skillset(manifest, tmp_path)
 
     assert result.warnings == ()
+
+
+# ---- state active profile integration ---------------------------------------
+
+
+def test_compose_uses_state_active_profile_when_no_explicit_profile(
+    tmp_path: Path,
+) -> None:
+    from skillpod.state.io import write_active_profile
+
+    write_active_profile("reviewer", "project", tmp_path)
+    manifest = _manifest(
+        "version: 1\n"
+        "skills: [audit, review]\n"
+        "profiles:\n"
+        "  reviewer:\n"
+        "    skills: [audit]\n"
+    )
+
+    result = compose_effective_skillset(manifest, tmp_path)
+
+    assert [s.name for s in result.skills] == ["audit"]
+
+
+def test_compose_explicit_profile_name_overrides_state(tmp_path: Path) -> None:
+    from skillpod.state.io import write_active_profile
+
+    write_active_profile("reviewer", "project", tmp_path)
+    manifest = _manifest(
+        "version: 1\n"
+        "skills: [audit, review]\n"
+        "profiles:\n"
+        "  reviewer:\n"
+        "    skills: [audit]\n"
+        "  ci:\n"
+        "    skills: [review]\n"
+    )
+
+    result = compose_effective_skillset(manifest, tmp_path, profile_name="ci")
+
+    assert [s.name for s in result.skills] == ["review"]
+
+
+def test_compose_no_state_returns_all_skills_unchanged(tmp_path: Path) -> None:
+    manifest = _manifest("version: 1\nskills: [audit, review]\n")
+
+    result = compose_effective_skillset(manifest, tmp_path)
+
+    assert [s.name for s in result.skills] == ["audit", "review"]

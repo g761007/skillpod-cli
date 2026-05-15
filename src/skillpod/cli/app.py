@@ -26,9 +26,11 @@ from skillpod.cli.commands import (
     list_cmd,
     profile_add,
     profile_create,
+    profile_current,
     profile_list,
     profile_remove,
     profile_show,
+    profile_use,
 )
 from skillpod.cli.commands import (
     init as init_cmd,
@@ -50,6 +52,9 @@ from skillpod.cli.commands import (
 )
 from skillpod.cli.commands import (
     status as status_cmd,
+)
+from skillpod.cli.commands import (
+    switch as switch_cmd,
 )
 from skillpod.cli.commands import (
     sync as sync_cmd,
@@ -674,6 +679,86 @@ def profile_remove_cmd(
         profile_name=profile_name,
         skill_name=skill_name,
         is_global=is_global,
+    )
+
+
+@app.command("switch", help="Set the active profile for a scope (project/global/session).")
+def switch_command(
+    name: Annotated[str, typer.Argument(help="Profile name to activate.")],
+    scope: Annotated[
+        str | None,
+        typer.Option(
+            "--scope",
+            "-s",
+            help="Scope: project (default inside a project), global, or session (prints export).",
+        ),
+    ] = None,
+    yes_global: Annotated[
+        bool,
+        typer.Option(
+            "--global",
+            help="Confirm writing the global active-profile when inside a project root.",
+        ),
+    ] = False,
+    manifest: ManifestOpt = Path("skillfile.yml"),
+    json: JsonOpt = False,
+) -> None:
+    manifest_path = manifest if manifest.is_absolute() else (Path.cwd() / manifest).resolve()
+    project_root = _project_root(manifest_path)
+    effective_scope = scope or ("project" if manifest_path.is_file() else "global")
+    switch_cmd.run(
+        name,
+        effective_scope,
+        project_root=project_root,
+        manifest_path=manifest_path,
+        json_output=json,
+        yes_global=yes_global,
+    )
+
+
+@profile_app.command("use", help="Set the active profile (alias for 'switch').")
+def profile_use_cmd(
+    name: Annotated[str, typer.Argument(help="Profile name to activate.")],
+    scope: Annotated[
+        str | None,
+        typer.Option(
+            "--scope",
+            "-s",
+            help="Scope: project (default inside a project), global, or session.",
+        ),
+    ] = None,
+    yes_global: Annotated[
+        bool,
+        typer.Option(
+            "--global",
+            help="Confirm writing the global active-profile when inside a project root.",
+        ),
+    ] = False,
+    manifest: ManifestOpt = Path("skillfile.yml"),
+    json: JsonOpt = False,
+) -> None:
+    manifest_path = manifest if manifest.is_absolute() else (Path.cwd() / manifest).resolve()
+    project_root = _project_root(manifest_path)
+    effective_scope = scope or ("project" if manifest_path.is_file() else "global")
+    profile_use.run(
+        name,
+        effective_scope,
+        project_root=project_root,
+        manifest_path=manifest_path,
+        json_output=json,
+        yes_global=yes_global,
+    )
+
+
+@profile_app.command("current", help="Show the active profile and its scope.")
+def profile_current_cmd(
+    manifest: ManifestOpt = Path("skillfile.yml"),
+    json: JsonOpt = False,
+) -> None:
+    manifest_path = manifest if manifest.is_absolute() else (Path.cwd() / manifest).resolve()
+    profile_current.run(
+        project_root=_project_root(manifest_path),
+        json_output=json,
     )
 
 
