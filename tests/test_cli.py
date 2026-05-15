@@ -2167,3 +2167,23 @@ def test_profile_use_alias_works(
     data = json.loads(current.stdout)
     assert data["active_profile"] == "ci"
     assert data["scope"] == "project"
+
+
+def test_shell_command_nested_guard(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """shell command exits 1 when already inside a skillpod shell."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("SKILLPOD_SHELL_DEPTH", "1")
+    proj = _project(
+        tmp_path,
+        "version: 1\nskills:\n  - audit\n"
+        "profiles:\n  dev:\n    skills: [audit]\n",
+    )
+
+    result = runner.invoke(
+        app,
+        ["shell", "dev", "--manifest", str(proj / "skillfile.yml")],
+    )
+
+    assert result.exit_code == 1

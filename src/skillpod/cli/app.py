@@ -51,6 +51,9 @@ from skillpod.cli.commands import (
     search as search_cmd,
 )
 from skillpod.cli.commands import (
+    shell as shell_cmd,
+)
+from skillpod.cli.commands import (
     status as status_cmd,
 )
 from skillpod.cli.commands import (
@@ -679,6 +682,21 @@ def profile_remove_cmd(
         profile_name=profile_name,
         skill_name=skill_name,
         is_global=is_global,
+    )
+
+
+@app.command("shell", help="Start a sub-shell with a profile pre-activated.")
+def shell_command(
+    profile: Annotated[str, typer.Argument(help="Profile name to activate.")],
+    manifest: ManifestOpt = Path("skillfile.yml"),
+    json: JsonOpt = False,
+) -> None:
+    manifest_path = manifest if manifest.is_absolute() else (Path.cwd() / manifest).resolve()
+    shell_cmd.run(
+        profile_name=profile,
+        project_root=_project_root(manifest_path),
+        manifest_path=manifest_path,
+        json_output=json,
     )
 
 
