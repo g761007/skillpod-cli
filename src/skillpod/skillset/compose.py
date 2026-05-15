@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import sys
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -13,6 +15,11 @@ from skillpod.profile.errors import ProfileError
 from skillpod.profile.io import get_project_profile, load_global_profile
 from skillpod.skillset.layers import LayerOrigin
 from skillpod.state.active import read_active_profile
+
+
+def parse_profile_expr(expr: str) -> list[str]:
+    """Split a '+'-separated profile expression into a list of names."""
+    return [p.strip() for p in expr.split("+") if p.strip()]
 
 
 @dataclass(frozen=True)
@@ -31,6 +38,7 @@ def _apply_activation_policy(
     ignore_global: bool,
     manifest: Skillfile,
     home: Path | None,
+    project_root: Path | None = None,
 ) -> tuple[ProfileEntry | None, set[str], tuple[str, ...]]:
     """Resolve the activation policy to an effective profile.
 
@@ -58,7 +66,7 @@ def _apply_activation_policy(
         and not ignore_global
     )
 
-    project_p = get_project_profile(manifest, name)
+    project_p = get_project_profile(manifest, name, project_root=project_root)
     global_p: ProfileEntry | None = load_global_profile(name, home) if can_use_global else None
 
     if activation.mode == "strict":
@@ -129,6 +137,55 @@ def _apply_activation_policy(
     )
 
 
+def _emit_experimental_warning() -> None:
+    """Print the composition experimental warning to stderr (once per process)."""
+    if os.environ.get("SKILLPOD_DISABLE_EXPERIMENTAL_WARNING") == "1":
+        return
+    sys.stderr.write(
+        "warning: profile composition is experimental"
+        " — semantics may change in v0.7.x\n"
+    )
+
+
+def _compose_multi(
+    names: list[str],
+    *,
+    manifest: Skillfile,
+    ignore_global: bool,
+    home: Path | None,
+) -> ProfileEntry:
+    """Resolve multiple profile names and union their skills/agents."""
+    merged_skills: list[str] = []
+    seen_skills: set[str] = set()
+    merged_agents: list[str] = []
+    seen_agents: set[str] = set()
+    merged_type: str | None = None
+
+    for name in names:
+        effective_profile, _global_names, _warns = _apply_activation_policy(
+            manifest.activation,
+            profile_name=name,
+            ignore_global=ignore_global,
+            manifest=manifest,
+            home=home,
+            project_root=None,
+        )
+        if effective_profile is None:
+            raise ProfileError(f"profile '{name}' not found")
+        if merged_type is None and effective_profile.type is not None:
+            merged_type = effective_profile.type
+        for skill in effective_profile.skills:
+            if skill not in seen_skills:
+                merged_skills.append(skill)
+                seen_skills.add(skill)
+        for agent in effective_profile.agents:
+            if agent not in seen_agents:
+                merged_agents.append(agent)
+                seen_agents.add(agent)
+
+    return ProfileEntry(type=merged_type, skills=merged_skills, agents=merged_agents)
+
+
 def compose_effective_skillset(
     manifest: Skillfile,
     project_root: Path,
@@ -151,6 +208,44 @@ def compose_effective_skillset(
         state_name, _state_scope = read_active_profile(project_root, home=home)
         if state_name is not None:
             profile_name = state_name
+
+    # Composition path: "dev+reviewer" — union of multiple profiles
+    if profile_name is not None and "+" in profile_name:
+        _emit_experimental_warning()
+        names = parse_profile_expr(profile_name)
+        synthetic_profile = _compose_multi(
+            names,
+            manifest=manifest,
+            ignore_global=ignore_global,
+            home=home,
+        )
+        _flat_skills = flatten(manifest)
+        _user_skills: dict[str, Path] = discover_user_skills(project_root)
+        _flat_names = {s.name for s in _flat_skills}
+        _shadowed = sorted(_flat_names & set(_user_skills))
+        if _shadowed:
+            warnings.warn(
+                ".skillpod/user_skills entries shadow manifest skill(s): "
+                + ", ".join(_shadowed),
+                UserWarning,
+                stacklevel=2,
+            )
+        _combined: list[SkillEntry] = list(_flat_skills)
+        for _name in _user_skills:
+            if _name not in _flat_names:
+                _combined.append(SkillEntry(name=_name))
+        combined_names = {s.name for s in _combined}
+        unknown = [s for s in synthetic_profile.skills if s not in combined_names]
+        if unknown:
+            raise ProfileError(
+                f"profile '{profile_name}': unknown skill(s): "
+                + ", ".join(repr(s) for s in unknown)
+                + f"; available: {sorted(combined_names) or '<none>'}"
+            )
+        profile_skill_set = set(synthetic_profile.skills)
+        filtered = [s for s in _combined if s.name in profile_skill_set]
+        provenance = {s.name: LayerOrigin.PROFILE_FILTER for s in filtered}
+        return EffectiveSkillset(skills=filtered, provenance=provenance)
 
     flat_skills = flatten(manifest)
     user_skills: dict[str, Path] = discover_user_skills(project_root)
@@ -176,6 +271,7 @@ def compose_effective_skillset(
         ignore_global=ignore_global,
         manifest=manifest,
         home=home,
+        project_root=project_root,
     )
 
     if effective_profile is None:
@@ -215,4 +311,4 @@ def compose_effective_skillset(
     )
 
 
-__all__ = ["EffectiveSkillset", "compose_effective_skillset"]
+__all__ = ["EffectiveSkillset", "compose_effective_skillset", "parse_profile_expr"]
