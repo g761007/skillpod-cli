@@ -2187,3 +2187,141 @@ def test_shell_command_nested_guard(
     )
 
     assert result.exit_code == 1
+
+
+# ---- v0.6.4 composition / diff / export / import ----------------------------
+
+
+def _profile_project(tmp_path: Path) -> Path:
+    return _project(
+        tmp_path,
+        "version: 1\n"
+        "skills: [audit, review, lint]\n"
+        "profiles:\n"
+        "  dev:\n"
+        "    skills: [audit, lint]\n"
+        "  reviewer:\n"
+        "    skills: [audit, review]\n",
+    )
+
+
+def test_profile_diff_command(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    proj = _profile_project(tmp_path)
+
+    result = runner.invoke(
+        app,
+        ["profile", "diff", "dev", "reviewer", "--manifest", str(proj / "skillfile.yml"), "--json"],
+    )
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert "review" in payload["added"]
+    assert "lint" in payload["removed"]
+    assert "audit" in payload["common"]
+
+
+def test_profile_export_command(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    proj = _profile_project(tmp_path)
+
+    result = runner.invoke(
+        app,
+        ["profile", "export", "dev", "--manifest", str(proj / "skillfile.yml"), "--json"],
+    )
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["skillpod_profile_export"] == "1"
+    assert payload["profile"]["name"] == "dev"
+
+
+def test_profile_import_command(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    proj = _profile_project(tmp_path)
+
+    import yaml as _yaml
+
+    export_data = {
+        "skillpod_profile_export": "1",
+        "exported_at": "2026-05-15T00:00:00Z",
+        "source_scope": "project",
+        "profile": {
+            "name": "imported-dev",
+            "type": "role",
+            "skills": ["audit", "lint"],
+            "agents": [],
+        },
+    }
+    export_file = tmp_path / "dev_export.yml"
+    export_file.write_text(
+        _yaml.safe_dump(export_data, sort_keys=False),
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "profile",
+            "import",
+            str(export_file),
+            "--manifest",
+            str(proj / "skillfile.yml"),
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["imported"] is True
+    assert payload["name"] == "imported-dev"
+
+
+def test_switch_composition_session_scope_works(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    proj = _profile_project(tmp_path)
+
+    result = runner.invoke(
+        app,
+        [
+            "switch",
+            "dev+reviewer",
+            "--scope",
+            "session",
+            "--manifest",
+            str(proj / "skillfile.yml"),
+        ],
+    )
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert "dev+reviewer" in result.stdout
+
+
+def test_switch_composition_project_scope_raises(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    proj = _profile_project(tmp_path)
+
+    result = runner.invoke(
+        app,
+        [
+            "switch",
+            "dev+reviewer",
+            "--scope",
+            "project",
+            "--manifest",
+            str(proj / "skillfile.yml"),
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "cannot be persisted" in (result.stdout + result.stderr)

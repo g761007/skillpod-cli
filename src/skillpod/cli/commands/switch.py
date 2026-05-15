@@ -23,6 +23,11 @@ def run(
     home: Path | None = None,
 ) -> None:
     def _run() -> None:
+        if "+" in name and scope != "session":
+            raise ProfileError(
+                "composition expressions cannot be persisted; use --scope session"
+            )
+
         if scope == "session":
             export_line = f"export {ENV_VAR}={name}"
             typer.echo(export_line)

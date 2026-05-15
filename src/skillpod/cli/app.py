@@ -27,6 +27,9 @@ from skillpod.cli.commands import (
     profile_add,
     profile_create,
     profile_current,
+    profile_diff,
+    profile_export,
+    profile_import,
     profile_list,
     profile_remove,
     profile_show,
@@ -777,6 +780,65 @@ def profile_current_cmd(
     profile_current.run(
         project_root=_project_root(manifest_path),
         json_output=json,
+    )
+
+
+@profile_app.command("diff", help="Show skill differences between two profiles.")
+def profile_diff_cmd(
+    profile_a: Annotated[str, typer.Argument(help="First profile name.")],
+    profile_b: Annotated[str, typer.Argument(help="Second profile name.")],
+    manifest: ManifestOpt = Path("skillfile.yml"),
+    json: JsonOpt = False,
+) -> None:
+    manifest_path = manifest if manifest.is_absolute() else (Path.cwd() / manifest).resolve()
+    profile_diff.run(
+        profile_a,
+        profile_b,
+        project_root=_project_root(manifest_path),
+        manifest_path=manifest_path,
+        json_output=json,
+    )
+
+
+@profile_app.command("export", help="Export a profile to a self-contained YAML file.")
+def profile_export_cmd(
+    name: Annotated[str, typer.Argument(help="Profile name.")],
+    manifest: ManifestOpt = Path("skillfile.yml"),
+    json: JsonOpt = False,
+    out: Annotated[
+        Path | None, typer.Option("--out", help="Output file path.")
+    ] = None,
+) -> None:
+    manifest_path = manifest if manifest.is_absolute() else (Path.cwd() / manifest).resolve()
+    profile_export.run(
+        name,
+        project_root=_project_root(manifest_path),
+        manifest_path=manifest_path,
+        json_output=json,
+        out=out,
+    )
+
+
+@profile_app.command("import", help="Import a profile from a YAML file.")
+def profile_import_cmd(
+    file: Annotated[Path, typer.Argument(help="Path to exported profile YAML.")],
+    manifest: ManifestOpt = Path("skillfile.yml"),
+    json: JsonOpt = False,
+    is_global: Annotated[
+        bool, typer.Option("--global", help="Import into global scope.")
+    ] = False,
+    rename: Annotated[
+        str | None, typer.Option("--rename", help="Import under a different name.")
+    ] = None,
+) -> None:
+    manifest_path = manifest if manifest.is_absolute() else (Path.cwd() / manifest).resolve()
+    profile_import.run(
+        file,
+        project_root=_project_root(manifest_path),
+        manifest_path=manifest_path,
+        json_output=json,
+        is_global=is_global,
+        rename=rename,
     )
 
 

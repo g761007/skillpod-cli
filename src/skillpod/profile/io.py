@@ -20,22 +20,40 @@ _VALID_NAME = re.compile(r"^[a-zA-Z0-9_-]+$")
 # ---------------------------------------------------------------------------
 
 
-def load_global_profile(name: str, home: Path | None = None) -> ProfileEntry | None:
-    """Load a global profile by name; return None if the file does not exist."""
-    path = global_profile_path(name, home)
+def _load_profile_file(name: str, path: Path) -> ProfileEntry | None:
+    """Load a ProfileEntry from a given YAML file path; return None if not found."""
     if not path.is_file():
         return None
     try:
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
     except yaml.YAMLError as exc:
-        raise ProfileError(f"invalid YAML in global profile '{name}': {exc}") from exc
+        raise ProfileError(f"invalid YAML in profile '{name}': {exc}") from exc
     if not isinstance(data, dict):
-        raise ProfileError(f"global profile '{name}': top level must be a mapping")
+        raise ProfileError(f"profile '{name}': top level must be a mapping")
     try:
         f = GlobalProfileFile.model_validate(data)
     except Exception as exc:
-        raise ProfileError(f"global profile '{name}': {exc}") from exc
+        raise ProfileError(f"profile '{name}': {exc}") from exc
     return f.profile
+
+
+def load_global_profile(name: str, home: Path | None = None) -> ProfileEntry | None:
+    """Load a global profile by name; return None if the file does not exist.
+
+    Checks both the canonical path (~/.skillpod/profiles/<name>.yml) and the
+    legacy global_profile_path location.
+    """
+    # Check canonical global path first
+    _home = home or Path.home()
+    canonical = _home / ".skillpod" / "profiles" / f"{name}.yml"
+    result = _load_profile_file(name, canonical)
+    if result is not None:
+        return result
+    # Fall back to the installer-managed path (may differ on some systems)
+    path = global_profile_path(name, home)
+    if path != canonical:
+        return _load_profile_file(name, path)
+    return None
 
 
 def _validate_name(name: str) -> None:
@@ -80,9 +98,26 @@ def list_global_profiles(home: Path | None = None) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-def get_project_profile(manifest: Skillfile, name: str) -> ProfileEntry | None:
-    """Return the named project profile or None."""
-    return manifest.profiles.get(name)
+def get_project_profile(
+    manifest: Skillfile,
+    name: str,
+    *,
+    project_root: Path | None = None,
+) -> ProfileEntry | None:
+    """Return the named project profile or None.
+
+    Also checks `.skillpod/imported/<name>.yml` when ``project_root`` is provided,
+    which is where ``profile import`` writes sidecar profile files.
+    """
+    entry = manifest.profiles.get(name)
+    if entry is not None:
+        return entry
+    if project_root is not None:
+        imported_path = project_root / ".skillpod" / "imported" / f"{name}.yml"
+        imported = _load_profile_file(name, imported_path)
+        if imported is not None:
+            return imported
+    return None
 
 
 def list_project_profiles(manifest: Skillfile) -> list[str]:
