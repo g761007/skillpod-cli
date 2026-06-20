@@ -106,3 +106,48 @@ groups:
 # -------------------------------------------------------------------------
 use:
   - frontend
+
+# -------------------------------------------------------------------------
+# profiles  [optional, default: {}]
+#   Named, role-oriented SUBSETS of the effective skill set. Activating a
+#   profile (`--profile <name>`) keeps only the skills it lists and drops
+#   the rest. Compose several with `+`: `--profile developer+designer`.
+#
+#   Rules:
+#     - Profile name: letters, digits, hyphens, underscores only.
+#     - Every name in `skills:` must also exist in the project's effective
+#       skill set (top-level `skills:` plus any group pulled in via `use:`),
+#       else install fails with a ProfileError.
+#     - `agents:` (optional) must be a subset of top-level `agents:`. When
+#       profiles are composed, their agent lists are unioned.
+#     - `type:` (optional) is display-only metadata; it does not affect
+#       resolution.
+#   For a realistic multi-role manifest, see examples/profiles.skillfile.yml.
+# -------------------------------------------------------------------------
+profiles:
+  developer:
+    type: role                # [optional, default: null]  display-only label
+    agents: [claude, codex]   # [optional, default: []]    subset of agents:
+    skills:                   # [optional, default: []]    subset of skill set
+      - audit
+      - polish
+  designer:
+    type: role
+    agents: [claude]
+    skills:
+      - web-design            # provided by the `frontend` group via `use:`
+
+# -------------------------------------------------------------------------
+# activation  [optional]   how a profile is selected when installing
+# -------------------------------------------------------------------------
+activation:
+  mode: manual                # [optional, default: "manual"]
+                              #   manual   — apply a profile only when --profile is passed
+                              #   merge    — auto-apply default_profile, layered over the base set
+                              #   fallback — use default_profile only if no --profile is given
+                              #   strict   — like merge but ignores global (~/) profiles
+  default_profile: null       # [optional, default: null]  profile to auto-apply.
+                              #   MUST be null when mode is "manual"; required to be a
+                              #   real key in `profiles:` for the other modes.
+  inherit_global: true        # [optional, default: true]  allow ~/ global profiles as fallback
+                              #   (always off when mode is "strict")

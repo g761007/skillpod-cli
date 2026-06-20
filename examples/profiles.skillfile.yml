@@ -1,0 +1,236 @@
+# profiles.skillfile.yml — role-based Workspace Profiles example
+#
+# A ready-to-copy manifest that turns one shared skill set into several
+# role-oriented "profiles". Activate one with:
+#
+#     skillpod install --profile developer
+#     skillpod install --profile designer
+#     skillpod install --profile project_manager
+#
+# Profiles compose with the `+` operator (their skills are unioned):
+#
+#     skillpod install --profile developer+designer
+#
+# How profiles work (filter mode, v0.6.x):
+#   1. `skills:` below declares the FULL skill set for the project.
+#   2. Each profile under `profiles:` is a NAMED SUBSET of that set.
+#   3. `--profile <name>` keeps only the skills the profile lists and drops
+#      the rest. Every name in a profile's `skills:` MUST also appear in the
+#      top-level `skills:` list, otherwise install fails with a ProfileError.
+#
+# The skill names here match the SKILL.md directories under
+# ~/.skillpod/skills, so this file installs as-is against that library.
+
+version: 1
+
+# Agents that receive fan-out. A profile's `agents:` must be a subset of this
+# list; when several profiles are composed their agent lists are unioned.
+agents:
+  - claude
+  - codex
+  - gemini
+
+install:
+  mode: symlink
+  fallback: [copy]
+
+# -------------------------------------------------------------------------
+# skills — the union of every skill referenced by any profile below.
+#   This is the project's full set; profiles only ever narrow it.
+# -------------------------------------------------------------------------
+skills:
+  # developer
+  - audit
+  - diagnose
+  - systematic-debugging
+  - test-driven-development
+  - improve-codebase-architecture
+  - optimize
+  - polish
+  - harden
+  - verification-before-completion
+  - executing-plans
+  - receiving-code-review
+  - requesting-code-review
+  # designer
+  - frontend-design
+  - ui-ux-pro-max
+  - web-design-guidelines
+  - brand-guidelines
+  - canvas-design
+  - theme-factory
+  - huashu-design
+  - pencil-senior-designer
+  - vision-ref
+  - delight
+  - colorize
+  # project_manager
+  - brainstorming
+  - clarify
+  - writing-plans
+  - doc-coauthoring
+  - internal-comms
+  - to-prd
+  - to-issues
+  - triage
+  - changelog-generator
+  - handoff
+  - distill
+  # frontend
+  - vercel-react-best-practices
+  - vercel-composition-patterns
+  - vercel-react-native-skills
+  - web-artifacts-builder
+  - webapp-testing
+  - web-asset-generator
+  - playwright-cli
+  # content_writer
+  - docx
+  - pdf
+  - pptx
+  - xlsx
+  # creative_media
+  - algorithmic-art
+  - animate
+  - gemini-image-generator
+  - gemini-visual
+  - remotion
+  - slack-gif-creator
+  - app-store-screenshots
+  - graphify
+  # ai_engineer
+  - claude-api
+  - mcp-builder
+  - prompt-engineering
+  - skill-creator
+  - writing-skills
+  - subagent-driven-development
+
+# -------------------------------------------------------------------------
+# profiles — named subsets of the skill set above.
+#   `type` is display-only metadata; it does not affect resolution.
+#   `agents` scopes fan-out to the agents that role actually uses.
+# -------------------------------------------------------------------------
+profiles:
+
+  # Core software engineering: debug, test, harden, review.
+  developer:
+    type: role
+    agents: [claude, codex]
+    skills:
+      - audit
+      - diagnose
+      - systematic-debugging
+      - test-driven-development
+      - improve-codebase-architecture
+      - optimize
+      - polish
+      - harden
+      - verification-before-completion
+      - executing-plans
+      - receiving-code-review
+      - requesting-code-review
+
+  # Visual & UX design: interfaces, brand, color, mockups.
+  designer:
+    type: role
+    agents: [claude]
+    skills:
+      - frontend-design
+      - ui-ux-pro-max
+      - web-design-guidelines
+      - brand-guidelines
+      - canvas-design
+      - theme-factory
+      - huashu-design
+      - pencil-senior-designer
+      - vision-ref
+      - delight
+      - colorize
+
+  # Planning & coordination: specs, issues, comms, changelogs.
+  project_manager:
+    type: role
+    agents: [claude]
+    skills:
+      - brainstorming
+      - clarify
+      - writing-plans
+      - doc-coauthoring
+      - internal-comms
+      - to-prd
+      - to-issues
+      - triage
+      - changelog-generator
+      - handoff
+      - distill
+
+  # Web/React build specialist.
+  frontend:
+    type: role
+    agents: [claude, codex]
+    skills:
+      - frontend-design
+      - ui-ux-pro-max
+      - web-design-guidelines
+      - vercel-react-best-practices
+      - vercel-composition-patterns
+      - vercel-react-native-skills
+      - web-artifacts-builder
+      - web-asset-generator
+      - webapp-testing
+      - playwright-cli
+
+  # Documents & office artifacts.
+  content_writer:
+    type: role
+    agents: [claude]
+    skills:
+      - docx
+      - pdf
+      - pptx
+      - xlsx
+      - doc-coauthoring
+      - internal-comms
+      - distill
+
+  # Generative art, animation, and video.
+  creative_media:
+    type: role
+    agents: [claude, gemini]
+    skills:
+      - algorithmic-art
+      - animate
+      - canvas-design
+      - gemini-image-generator
+      - gemini-visual
+      - remotion
+      - slack-gif-creator
+      - app-store-screenshots
+      - graphify
+
+  # Building LLM apps, MCP servers, and skills.
+  ai_engineer:
+    type: role
+    agents: [claude, codex, gemini]
+    skills:
+      - claude-api
+      - mcp-builder
+      - prompt-engineering
+      - skill-creator
+      - writing-skills
+      - subagent-driven-development
+
+# -------------------------------------------------------------------------
+# activation — how a profile is chosen.
+#   mode: manual (default) → profiles apply ONLY when --profile is passed.
+#   To auto-apply one by default, switch to a non-manual mode and set
+#   default_profile, e.g.:
+#       activation:
+#         mode: merge
+#         default_profile: develop
+#   (manual mode forbids default_profile.)
+# -------------------------------------------------------------------------
+activation:
+  mode: manual
+  inherit_global: true
