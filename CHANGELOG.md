@@ -9,32 +9,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Global profiles that download & swap skills (`skillpod profile apply <name>`)** —
+- **Global profiles that download & swap skills (`skillpod switch <name> --scope global`)** —
   a standalone profile at `~/.skillpod/profiles/<name>.yml` whose skills carry an
   inline `source` (git URL / `owner/repo` / local path, with optional `ref` / `subpath`).
-  Applying it reconciles the global per-agent fan-out (`~/.<agent>/skills/`) to match
-  the profile:
+  Switching to it reconciles the global per-agent fan-out (`~/.<agent>/skills/`):
   - skills missing from `~/.skillpod/skills/` are **downloaded** from their source;
   - the profile's skills are **fanned out** to the declared agents;
   - managed skills the profile no longer lists are **unlinked**, keeping the
     `~/.skillpod/skills/` cache copy for instant re-activation;
-  - the applied profile is recorded as the active global profile.
-  - Runs as a **preview by default** (shows the download / link / unlink diff);
-    `--yes` executes. Switching is just `apply <other> --yes`.
-  - Skill entries accept both the bare-name form (already installed) and the
-    object form `{name, source, ref?, subpath?}`; `name` must match the skill's
-    directory name in its source.
-  - Example: `examples/global-profile.yml`.
+  - the profile is recorded as the active global profile.
+  - `--dry-run` previews the download / link / unlink diff without applying.
+  - A skill missing with no source to download from is **skipped with a warning**
+    (so legacy name-only profiles still apply what they can).
+  - An unmanaged real directory at a fan-out target is never overwritten — it
+    raises a conflict instead of deleting the user's content.
+- **`switch --scope global --back`** — restore the previous global skill set
+  (single-level undo; the prior set is snapshotted before every global switch).
+- **Switch from a URL** — `switch <url-or-owner/repo/path.yml> --scope global`
+  downloads the profile to `~/.skillpod/profiles/` when not already present
+  (`--update` forces a refresh). Supports direct `https://…/<file>.yml` and the
+  `owner/repo/path/<file>.yml` raw.githubusercontent shorthand.
+- **`skillpod profile save <name>`** — snapshot the current global skill set into a
+  profile, recovering each skill's `source` best-effort from its cache symlink so
+  the profile is portable.
+- Global profile files gain optional `name` and `description` fields (like a skill).
+- Skill entries in a global profile accept both the bare-name form and the object
+  form `{name, source, ref?, subpath?}`.
 
 ### Internal
 
-- New `skillpod.installer.global_apply` (reconcile engine: `plan_apply` / `execute_apply`)
-  and `unlink_global_fanout` (fan-out-only removal that preserves the cache).
+- New `skillpod.installer.global_apply` (reconcile engine: `plan_apply` /
+  `execute_apply` / `managed_global_skills`) and `unlink_global_fanout`
+  (fan-out-only removal that preserves the cache).
+- New `skillpod.profile.snapshot` (source recovery + profile writer),
+  `skillpod.profile.fetch` (URL resolution), and `skillpod.state.history`
+  (single-level undo). `switch --scope global` orchestrates them.
 - New `GlobalProfileSkill` / `GlobalProfileBody` models; `GlobalProfileFile.as_profile_entry()`
   keeps filter-mode `load_global_profile` backward-compatible (name-only `ProfileEntry`).
-- 12 new tests (model normalisation, reconcile classification, end-to-end download +
-  fan-out from a real git source, profile-switch unlink, CLI preview vs `--yes`);
-  `ruff` and `mypy --strict` clean.
+- 24 new tests (model normalisation, reconcile classification, end-to-end download +
+  fan-out from a real git source, agent-narrowing, unmanaged-data protection,
+  source recovery, save, `--back` round-trip, URL fetch via respx, CLI dry-run vs
+  apply); `ruff` and `mypy --strict` clean.
 
 ## [0.6.4] — 2026-05-15
 

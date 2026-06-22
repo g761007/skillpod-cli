@@ -359,9 +359,9 @@ IDEs can use this schema for autocomplete and validation.
 | `skillpod doctor`           | Verify manifest / lockfile / symlink consistency                         |
 | `skillpod status`           | Show project status, active profile, and shell session depth             |
 | `skillpod resolve`          | Resolve the effective skill set with optional profile filter and explain |
-| `skillpod switch`           | Set the active profile for the current scope                             |
+| `skillpod switch`           | Set the active profile; global scope reconciles & downloads skills (`--dry-run`, `--back`) |
 | `skillpod shell <profile>`  | Start a sub-shell with a profile pre-activated                           |
-| `skillpod profile`          | Manage workspace profiles (create, list, show, add, remove, diff, export, import, apply) |
+| `skillpod profile`          | Manage workspace profiles (create, list, show, add, remove, diff, export, import, save) |
 | `skillpod global`           | Manage global skills: list, link/unlink to agents, consolidate, audit   |
 | `skillpod adapter`          | Inspect the active adapter registry                                      |
 
@@ -488,11 +488,10 @@ skillpod switch reviewer                     # default: project scope
 skillpod profile current                     # → reviewer (project)
 ```
 
-**Global** (persists in `~/.skillpod/active-profile`, affects all projects):
-
-```bash
-skillpod switch reviewer --scope global --global
-```
+**Global** — `switch --scope global` materialises a **global profile**
+(`~/.skillpod/profiles/<name>.yml`): it reconciles the global skill set and
+records the active profile in `~/.skillpod/active-profile`. This is its own
+topic — see ["Global profiles that download & swap skills"](#global-profiles-that-download--swap-skills-switch---scope-global) below.
 
 **Session-scoped** (env var only, no files written):
 
@@ -504,44 +503,64 @@ echo $SKILLPOD_ACTIVE_PROFILE   # → reviewer
 Once a profile is active, all commands (`resolve`, `install`, `sync`, `status`)
 automatically use it — no `--profile` flag needed.
 
-### Global profiles that download & swap skills (`skillpod profile apply`)
+### Global profiles that download & swap skills (`switch --scope global`)
 
 The `profiles:` block above is a *filter* over a project's declared skills.
 A **global profile** is the standalone counterpart: a self-contained file at
 `~/.skillpod/profiles/<name>.yml` whose skills carry their own **source**, so it
-works without any project. Applying it reconciles your global per-agent skill
-directories (`~/.<agent>/skills/`) to match the profile — downloading anything
-missing and unlinking anything the profile dropped.
+works without any project. Switching to it reconciles your global per-agent
+skill directories (`~/.<agent>/skills/`) to match the profile — downloading
+anything missing and unlinking anything the profile dropped.
 
 ```yaml
 # ~/.skillpod/profiles/developer.yml
 version: 1
 profile:
+  name: developer                  # optional; used as the filename on URL download
+  description: Core dev skills      # optional; shown in listings
   type: role
   agents: [claude, codex]
   skills:
     - audit                          # already installed: name only
-    - name: polish                   # downloaded on apply from its source
+    - name: polish                   # downloaded on switch from its source
       source: anthropics/skills      # git URL / owner/repo / local path
       ref: main                      # optional
       subpath: skills/polish         # optional
 ```
 
 ```bash
-skillpod profile apply developer          # preview the reconcile diff (no changes)
-skillpod profile apply developer --yes     # download missing, fan out, unlink dropped
+skillpod switch developer --scope global --dry-run   # preview the reconcile diff
+skillpod switch developer --scope global             # download missing, fan out, unlink dropped
+skillpod switch --scope global --back                # restore the previous global skill set
 ```
 
-On apply, skillpod:
+On switch (global scope), skillpod:
 
-- **downloads** skills missing from `~/.skillpod/skills/` from their `source`,
+- **downloads** skills missing from `~/.skillpod/skills/` from their `source`
+  (skills with no source that are not installed are skipped with a warning),
 - **fans out** the profile's skills to the declared agents,
 - **unlinks** managed skills the profile no longer lists — keeping the
   `~/.skillpod/skills/` cache copy so re-activation needs no re-download,
+- snapshots the previous set so `switch --back` can undo it,
 - records the profile as the active global profile.
 
-Switching is just applying a different profile: `skillpod profile apply other
---yes` swaps the active global skill set. See `examples/global-profile.yml`.
+Switching to a different profile swaps the active global skill set. You can also
+switch straight from a URL — downloaded to `~/.skillpod/profiles/` if not already
+present:
+
+```bash
+skillpod switch https://example.com/developer.yml --scope global
+skillpod switch owner/repo/profiles/developer.yml --scope global   # raw.githubusercontent shorthand
+```
+
+To capture your **current** global skills into a reusable profile (recovering
+each skill's source where possible, so it is portable):
+
+```bash
+skillpod profile save developer
+```
+
+See `examples/global-profile.yml`.
 
 ### Sub-shell sessions (`skillpod shell`)
 
