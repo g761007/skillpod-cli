@@ -3,6 +3,7 @@ language: en,en-GB
 # Project-specific identifiers and Commonwealth-English spellings. Keep
 # this list lowercase and alphabetically sorted.
 words:
+  - anthropics
   - antigravity
   - cspell
   - hardlink

@@ -1,0 +1,56 @@
+# global-profile.yml — a switchable, self-sourced GLOBAL profile
+#
+# Place this file at ~/.skillpod/profiles/<name>.yml (e.g. developer.yml),
+# then activate it with:
+#
+#     skillpod profile apply developer          # preview the reconcile diff
+#     skillpod profile apply developer --yes     # actually apply it
+#
+# Unlike a project's skillfile.yml `profiles:` block (which only *filters* an
+# already-declared skill set), a global profile is self-contained: each skill
+# may carry an inline `source`, and applying the profile reconciles the global
+# per-agent skill directories (~/.<agent>/skills/) to match it:
+#
+#   - skills missing from ~/.skillpod/skills/ are downloaded from their source
+#   - skills the profile lists are fanned out to the declared agents
+#   - managed skills the profile no longer lists are unlinked
+#     (the ~/.skillpod/skills/ cache copy is kept for instant re-activation)
+#
+# Switching to a different global profile (apply <other> --yes) swaps the
+# active global skill set accordingly.
+
+version: 1
+
+profile:
+  # type: display-only label (role / project / task / team). Optional.
+  type: role
+
+  # agents: which agent dirs receive fan-out. Subset of the supported set
+  # (claude, codex, gemini, cursor, opencode, antigravity). Optional —
+  # defaults to all supported agents when omitted.
+  agents:
+    - claude
+    - codex
+
+  # skills: each entry is either a bare name (must already be installed in
+  # ~/.skillpod/skills/) or an object carrying an inline source so it can be
+  # downloaded on apply. `name` must match the skill's directory name in its
+  # source (selecting one of several in a multi-skill repo, or the repo's
+  # own name for a root-is-skill repo).
+  skills:
+    # Already installed locally — name only, no download needed.
+    - audit
+
+    # owner/repo shorthand → cloned from GitHub; ref/subpath optional.
+    - name: polish
+      source: anthropics/skills
+      ref: main
+      subpath: skills/polish
+
+    # Full git URL is also accepted.
+    - name: web-design-guidelines
+      source: https://github.com/anthropics/skills
+
+    # A local path works too (useful for skills you develop yourself).
+    - name: my-skill
+      source: ~/dev/my-skills/my-skill

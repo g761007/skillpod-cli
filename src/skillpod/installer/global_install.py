@@ -29,6 +29,7 @@ from skillpod.installer.paths import (
     global_agent_skill_dir,
     global_install_root,
     global_skill_dir,
+    is_managed_global_fanout,
 )
 from skillpod.lockfile.integrity import hash_directory
 from skillpod.sources.discovery import DiscoveredSkill
@@ -288,6 +289,36 @@ def uninstall_global(
     return removed
 
 
+def unlink_global_fanout(
+    skill_name: str,
+    *,
+    agents: Iterable[str] | None = None,
+    home: Path | None = None,
+) -> list[Path]:
+    """Remove only the per-agent fan-out for ``skill_name``, keeping the cache.
+
+    Unlike :func:`uninstall_global`, this leaves ``~/.skillpod/skills/<name>``
+    in place so the skill can be re-activated later without re-downloading.
+    Only *managed* fan-out entries (skillpod-created symlinks / copies) are
+    removed; unmanaged paths the user placed by hand are left untouched.
+
+    Returns the list of fan-out paths that were actually removed.
+    """
+    target_agents = list(agents) if agents is not None else list(DEFAULT_GLOBAL_AGENTS)
+    removed: list[Path] = []
+    for agent in target_agents:
+        link = global_agent_skill_dir(agent, skill_name, home)
+        if not is_managed_global_fanout(link, skill_name, home):
+            continue
+        if link.is_symlink() or link.is_file():
+            link.unlink()
+            removed.append(link)
+        elif link.is_dir():
+            shutil.rmtree(link)
+            removed.append(link)
+    return removed
+
+
 __all__ = [
     "DEFAULT_GLOBAL_AGENTS",
     "GlobalInstallReport",
@@ -295,6 +326,7 @@ __all__ = [
     "install_global",
     "materialise_agent_link",
     "uninstall_global",
+    "unlink_global_fanout",
 ]
 
 

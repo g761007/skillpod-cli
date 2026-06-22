@@ -361,7 +361,7 @@ IDEs can use this schema for autocomplete and validation.
 | `skillpod resolve`          | Resolve the effective skill set with optional profile filter and explain |
 | `skillpod switch`           | Set the active profile for the current scope                             |
 | `skillpod shell <profile>`  | Start a sub-shell with a profile pre-activated                           |
-| `skillpod profile`          | Manage workspace profiles (create, list, show, add, remove, diff, export, import) |
+| `skillpod profile`          | Manage workspace profiles (create, list, show, add, remove, diff, export, import, apply) |
 | `skillpod global`           | Manage global skills: list, link/unlink to agents, consolidate, audit   |
 | `skillpod adapter`          | Inspect the active adapter registry                                      |
 
@@ -503,6 +503,45 @@ echo $SKILLPOD_ACTIVE_PROFILE   # → reviewer
 
 Once a profile is active, all commands (`resolve`, `install`, `sync`, `status`)
 automatically use it — no `--profile` flag needed.
+
+### Global profiles that download & swap skills (`skillpod profile apply`)
+
+The `profiles:` block above is a *filter* over a project's declared skills.
+A **global profile** is the standalone counterpart: a self-contained file at
+`~/.skillpod/profiles/<name>.yml` whose skills carry their own **source**, so it
+works without any project. Applying it reconciles your global per-agent skill
+directories (`~/.<agent>/skills/`) to match the profile — downloading anything
+missing and unlinking anything the profile dropped.
+
+```yaml
+# ~/.skillpod/profiles/developer.yml
+version: 1
+profile:
+  type: role
+  agents: [claude, codex]
+  skills:
+    - audit                          # already installed: name only
+    - name: polish                   # downloaded on apply from its source
+      source: anthropics/skills      # git URL / owner/repo / local path
+      ref: main                      # optional
+      subpath: skills/polish         # optional
+```
+
+```bash
+skillpod profile apply developer          # preview the reconcile diff (no changes)
+skillpod profile apply developer --yes     # download missing, fan out, unlink dropped
+```
+
+On apply, skillpod:
+
+- **downloads** skills missing from `~/.skillpod/skills/` from their `source`,
+- **fans out** the profile's skills to the declared agents,
+- **unlinks** managed skills the profile no longer lists — keeping the
+  `~/.skillpod/skills/` cache copy so re-activation needs no re-download,
+- records the profile as the active global profile.
+
+Switching is just applying a different profile: `skillpod profile apply other
+--yes` swaps the active global skill set. See `examples/global-profile.yml`.
 
 ### Sub-shell sessions (`skillpod shell`)
 

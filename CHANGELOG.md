@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Global profiles that download & swap skills (`skillpod profile apply <name>`)** —
+  a standalone profile at `~/.skillpod/profiles/<name>.yml` whose skills carry an
+  inline `source` (git URL / `owner/repo` / local path, with optional `ref` / `subpath`).
+  Applying it reconciles the global per-agent fan-out (`~/.<agent>/skills/`) to match
+  the profile:
+  - skills missing from `~/.skillpod/skills/` are **downloaded** from their source;
+  - the profile's skills are **fanned out** to the declared agents;
+  - managed skills the profile no longer lists are **unlinked**, keeping the
+    `~/.skillpod/skills/` cache copy for instant re-activation;
+  - the applied profile is recorded as the active global profile.
+  - Runs as a **preview by default** (shows the download / link / unlink diff);
+    `--yes` executes. Switching is just `apply <other> --yes`.
+  - Skill entries accept both the bare-name form (already installed) and the
+    object form `{name, source, ref?, subpath?}`; `name` must match the skill's
+    directory name in its source.
+  - Example: `examples/global-profile.yml`.
+
+### Internal
+
+- New `skillpod.installer.global_apply` (reconcile engine: `plan_apply` / `execute_apply`)
+  and `unlink_global_fanout` (fan-out-only removal that preserves the cache).
+- New `GlobalProfileSkill` / `GlobalProfileBody` models; `GlobalProfileFile.as_profile_entry()`
+  keeps filter-mode `load_global_profile` backward-compatible (name-only `ProfileEntry`).
+- 12 new tests (model normalisation, reconcile classification, end-to-end download +
+  fan-out from a real git source, profile-switch unlink, CLI preview vs `--yes`);
+  `ruff` and `mypy --strict` clean.
+
 ## [0.6.4] — 2026-05-15
 
 ### Added

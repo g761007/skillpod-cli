@@ -25,6 +25,7 @@ from skillpod.cli.commands import (
     install_cmd,
     list_cmd,
     profile_add,
+    profile_apply,
     profile_create,
     profile_current,
     profile_diff,
@@ -768,6 +769,28 @@ def profile_use_cmd(
         manifest_path=manifest_path,
         json_output=json,
         yes_global=yes_global,
+    )
+
+
+@profile_app.command(
+    "apply",
+    help="Reconcile global skills to a global profile (downloads missing skills).",
+)
+def profile_apply_cmd(
+    name: Annotated[str, typer.Argument(help="Global profile name to apply.")],
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", "-y", help="Execute the reconcile (default previews only)."),
+    ] = False,
+    manifest: ManifestOpt = Path("skillfile.yml"),
+    json: JsonOpt = False,
+) -> None:
+    manifest_path = manifest if manifest.is_absolute() else (Path.cwd() / manifest).resolve()
+    profile_apply.run(
+        name,
+        project_root=_project_root(manifest_path),
+        yes=yes,
+        json_output=json,
     )
 
 

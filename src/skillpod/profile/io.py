@@ -11,7 +11,7 @@ import yaml
 from skillpod.installer.paths import global_profile_path, global_profiles_root
 from skillpod.manifest.models import ProfileEntry, Skillfile
 from skillpod.profile.errors import ProfileError
-from skillpod.profile.models import GlobalProfileFile
+from skillpod.profile.models import GlobalProfileBody, GlobalProfileFile
 
 _VALID_NAME = re.compile(r"^[a-zA-Z0-9_-]+$")
 
@@ -20,8 +20,8 @@ _VALID_NAME = re.compile(r"^[a-zA-Z0-9_-]+$")
 # ---------------------------------------------------------------------------
 
 
-def _load_profile_file(name: str, path: Path) -> ProfileEntry | None:
-    """Load a ProfileEntry from a given YAML file path; return None if not found."""
+def _load_profile_body(name: str, path: Path) -> GlobalProfileBody | None:
+    """Load a GlobalProfileBody from a YAML file path; return None if absent."""
     if not path.is_file():
         return None
     try:
@@ -37,22 +37,48 @@ def _load_profile_file(name: str, path: Path) -> ProfileEntry | None:
     return f.profile
 
 
+def _load_profile_file(name: str, path: Path) -> ProfileEntry | None:
+    """Load a name-only ProfileEntry from a YAML file path; None if not found."""
+    body = _load_profile_body(name, path)
+    if body is None:
+        return None
+    return GlobalProfileFile(profile=body).as_profile_entry()
+
+
+def _resolve_global_paths(name: str, home: Path | None) -> list[Path]:
+    """Return the candidate file paths for a global profile, canonical first."""
+    _home = home or Path.home()
+    canonical = _home / ".skillpod" / "profiles" / f"{name}.yml"
+    paths = [canonical]
+    managed = global_profile_path(name, home)
+    if managed != canonical:
+        paths.append(managed)
+    return paths
+
+
 def load_global_profile(name: str, home: Path | None = None) -> ProfileEntry | None:
     """Load a global profile by name; return None if the file does not exist.
 
     Checks both the canonical path (~/.skillpod/profiles/<name>.yml) and the
-    legacy global_profile_path location.
+    legacy global_profile_path location. Returns a name-only ``ProfileEntry``
+    for filter-mode callers; use :func:`load_global_profile_body` for the
+    source-bearing form.
     """
-    # Check canonical global path first
-    _home = home or Path.home()
-    canonical = _home / ".skillpod" / "profiles" / f"{name}.yml"
-    result = _load_profile_file(name, canonical)
-    if result is not None:
-        return result
-    # Fall back to the installer-managed path (may differ on some systems)
-    path = global_profile_path(name, home)
-    if path != canonical:
-        return _load_profile_file(name, path)
+    for path in _resolve_global_paths(name, home):
+        result = _load_profile_file(name, path)
+        if result is not None:
+            return result
+    return None
+
+
+def load_global_profile_body(
+    name: str, home: Path | None = None
+) -> GlobalProfileBody | None:
+    """Load the source-bearing body of a global profile, or None if absent."""
+    for path in _resolve_global_paths(name, home):
+        body = _load_profile_body(name, path)
+        if body is not None:
+            return body
     return None
 
 
@@ -175,6 +201,7 @@ __all__ = [
     "list_global_profiles",
     "list_project_profiles",
     "load_global_profile",
+    "load_global_profile_body",
     "update_project_profile_skills",
     "write_global_profile",
 ]
