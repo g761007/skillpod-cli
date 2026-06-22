@@ -45,6 +45,8 @@ class GlobalProfileBody(BaseModel):
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
+    name: str | None = None  # canonical name; used for URL-download naming + display
+    description: str | None = None  # human-readable summary (display only)
     type: str | None = None
     agents: list[str] = []
     skills: list[GlobalProfileSkill] = []
