@@ -69,10 +69,6 @@ class ApplyReport:
     skipped: list[str] = field(default_factory=list)
 
 
-def _target_agents(body: GlobalProfileBody) -> list[str]:
-    return list(body.agents) if body.agents else list(DEFAULT_GLOBAL_AGENTS)
-
-
 def _present_in_cache(home: Path | None) -> set[str]:
     root = global_install_root(home)
     if not root.is_dir():
@@ -110,15 +106,24 @@ def _managed_fanned_out(agents: list[str], home: Path | None) -> set[str]:
     return names
 
 
-def plan_apply(body: GlobalProfileBody, *, home: Path | None = None) -> ApplyPlan:
-    """Compute the reconciliation diff for applying ``body``.
+def plan_apply(
+    body: GlobalProfileBody,
+    *,
+    agents: list[str] | None = None,
+    home: Path | None = None,
+) -> ApplyPlan:
+    """Compute the reconciliation diff for applying ``body`` to ``agents``.
+
+    ``agents`` is chosen at call time (the CLI's ``--agent`` flag); it defaults
+    to every supported agent. The profile's own ``agents`` field, if any, is
+    not used for targeting.
 
     - cache-missing skill with a source  → ``to_download``
     - cache-missing skill with no source → ``unresolved``
     - cached skill not fully fanned out  → ``to_link``
     - managed fan-out not in the profile → ``to_unlink``
     """
-    agents = _target_agents(body)
+    agents = list(agents) if agents else list(DEFAULT_GLOBAL_AGENTS)
     present = _present_in_cache(home)
     desired = {s.name for s in body.skills}
 

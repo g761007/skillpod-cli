@@ -16,7 +16,11 @@ from skillpod.installer.paths import (
 )
 from skillpod.profile.fetch import resolve_profile_target
 from skillpod.profile.io import load_global_profile_body
-from skillpod.profile.snapshot import recover_source, snapshot_current_global
+from skillpod.profile.snapshot import (
+    current_global_agents,
+    recover_source,
+    snapshot_current_global,
+)
 from tests._git_fixtures import make_root_skill_repo
 
 _COMMIT = "a" * 40
@@ -75,7 +79,9 @@ def test_snapshot_captures_managed_skills(tmp_path: Path, monkeypatch) -> None:
     assert body.name == "snap"
     assert [s.name for s in body.skills] == ["audit"]
     assert body.skills[0].source == "anthropics/skills"
-    assert "claude" in body.agents
+    # Snapshots no longer record agents (agents are chosen at switch time).
+    assert body.agents == []
+    assert "claude" in current_global_agents(home)
 
 
 # ---------------------------------------------------------------------------

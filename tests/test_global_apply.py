@@ -118,9 +118,10 @@ def test_apply_downloads_and_fans_out(tmp_path: Path) -> None:
     repo, _sha = make_root_skill_repo(tmp_path / "src", repo_name="audit")
     home = tmp_path / "home"
     body = GlobalProfileBody.model_validate(
-        {"agents": ["claude", "codex"], "skills": [{"name": "audit", "source": str(repo)}]}
+        {"skills": [{"name": "audit", "source": str(repo)}]}
     )
-    plan = plan_apply(body, home=home)
+    # Agents are chosen at switch time, not in the profile.
+    plan = plan_apply(body, agents=["claude", "codex"], home=home)
     report = execute_apply(body, plan, force=True, home=home)
 
     assert report.downloaded == ["audit"]
@@ -160,20 +161,21 @@ def test_narrowing_agents_prunes_dropped_agent(tmp_path: Path) -> None:
     repo, _sha = make_root_skill_repo(tmp_path / "src", repo_name="audit")
     home = tmp_path / "home"
 
-    # Profile A: audit on claude + codex.
-    body_a = GlobalProfileBody.model_validate(
-        {"agents": ["claude", "codex"], "skills": [{"name": "audit", "source": str(repo)}]}
+    # Switch A: audit to claude + codex.
+    body = GlobalProfileBody.model_validate(
+        {"skills": [{"name": "audit", "source": str(repo)}]}
     )
-    execute_apply(body_a, plan_apply(body_a, home=home), force=True, home=home)
+    execute_apply(
+        body, plan_apply(body, agents=["claude", "codex"], home=home), force=True, home=home
+    )
     assert is_managed_global_fanout(
         global_agent_skill_dir("codex", "audit", home), "audit", home
     )
 
-    # Profile B: same skill, but narrowed to claude only.
-    body_b = GlobalProfileBody.model_validate(
-        {"agents": ["claude"], "skills": [{"name": "audit", "source": str(repo)}]}
+    # Switch B: same skill, but narrowed to claude only.
+    execute_apply(
+        body, plan_apply(body, agents=["claude"], home=home), force=True, home=home
     )
-    execute_apply(body_b, plan_apply(body_b, home=home), force=True, home=home)
 
     # audit stays on claude, is pruned from codex, cache intact.
     assert is_managed_global_fanout(
@@ -196,8 +198,8 @@ def test_apply_does_not_clobber_unmanaged_fanout_dir(tmp_path: Path) -> None:
     marker = target / "user_data.txt"
     marker.write_text("precious", encoding="utf-8")
 
-    body = GlobalProfileBody.model_validate({"agents": ["claude"], "skills": ["audit"]})
-    plan = plan_apply(body, home=home)
+    body = GlobalProfileBody.model_validate({"skills": ["audit"]})
+    plan = plan_apply(body, agents=["claude"], home=home)
     with pytest.raises(InstallConflict):
         execute_apply(body, plan, force=False, home=home)
 
@@ -248,6 +250,29 @@ def test_switch_global_materialises_and_sets_active(tmp_path: Path) -> None:
     )
     active = (home / ".skillpod" / "active-profile").read_text(encoding="utf-8").strip()
     assert active == "dev"
+
+
+def test_switch_global_agent_flag_scopes_fanout(tmp_path: Path) -> None:
+    repo, _sha = make_root_skill_repo(tmp_path / "src", repo_name="audit")
+    home = tmp_path / "home"
+    _write_global_profile(
+        home, "dev", {"skills": [{"name": "audit", "source": str(repo)}]}
+    )
+
+    _switch("dev", tmp_path, home, agents=["claude"])
+    assert is_managed_global_fanout(
+        global_agent_skill_dir("claude", "audit", home), "audit", home
+    )
+    # Not fanned out to agents that were not requested.
+    assert not global_agent_skill_dir("codex", "audit", home).exists()
+
+
+def test_switch_global_unknown_agent_exits_nonzero(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    _write_global_profile(home, "dev", {"skills": []})
+    with pytest.raises(typer.Exit) as exc_info:
+        _switch("dev", tmp_path, home, agents=["bogus"])
+    assert exc_info.value.exit_code == 1
 
 
 def test_switch_global_unknown_profile_exits_nonzero(tmp_path: Path) -> None:

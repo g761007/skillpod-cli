@@ -74,8 +74,13 @@ def recover_source(name: str, home: Path | None = None) -> GlobalProfileSkill:
     return GlobalProfileSkill(name=name)
 
 
-def _active_agents(home: Path | None) -> list[str]:
-    """Agents that currently have at least one managed global fan-out."""
+def current_global_agents(home: Path | None = None) -> list[str]:
+    """Agents that currently have at least one managed global fan-out.
+
+    Profiles no longer record agents (those are chosen at switch time), but
+    this is still useful for the undo history, which must restore the previous
+    skills to the agents they were actually on.
+    """
     result: list[str] = []
     for agent in DEFAULT_GLOBAL_AGENTS:
         base = (home or Path.home()).expanduser() / f".{agent}" / "skills"
@@ -95,15 +100,14 @@ def snapshot_current_global(
     name: str | None = None,
     description: str | None = None,
 ) -> GlobalProfileBody:
-    """Capture the current managed global skill set as a profile body."""
+    """Capture the current managed global skill set as a profile body.
+
+    Agents are intentionally not recorded — a global profile is just a skill
+    set; which agents to install to is chosen at switch time.
+    """
     names = sorted(managed_global_skills(home))
     skills = [recover_source(n, home) for n in names]
-    return GlobalProfileBody(
-        name=name,
-        description=description,
-        agents=_active_agents(home),
-        skills=skills,
-    )
+    return GlobalProfileBody(name=name, description=description, skills=skills)
 
 
 def _skill_to_yaml(skill: GlobalProfileSkill) -> Any:
@@ -153,6 +157,7 @@ def write_global_profile_body(
 
 
 __all__ = [
+    "current_global_agents",
     "recover_source",
     "serialize_profile_body",
     "snapshot_current_global",

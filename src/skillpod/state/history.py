@@ -26,14 +26,20 @@ def previous_global_path(home: Path | None = None) -> Path:
 def save_previous_global(
     body: GlobalProfileBody,
     active_profile: str | None,
+    agents: list[str],
     home: Path | None = None,
 ) -> Path:
-    """Persist ``body`` (and the active-profile name) as the undo point."""
+    """Persist ``body``, the active-profile name, and the agents it was on.
+
+    ``agents`` is recorded here (internal state), not in the profile, so
+    ``switch --back`` can restore the previous skills to the same agents.
+    """
     path = previous_global_path(home)
     path.parent.mkdir(parents=True, exist_ok=True)
     payload: dict[str, Any] = {
         "version": 1,
         "active_profile": active_profile,
+        "agents": list(agents),
         "profile": serialize_profile_body(body)["profile"],
     }
     path.write_text(
@@ -45,8 +51,8 @@ def save_previous_global(
 
 def load_previous_global(
     home: Path | None = None,
-) -> tuple[GlobalProfileBody, str | None] | None:
-    """Return ``(body, active_profile)`` from the undo point, or None if absent."""
+) -> tuple[GlobalProfileBody, str | None, list[str]] | None:
+    """Return ``(body, active_profile, agents)`` from the undo point, or None."""
     path = previous_global_path(home)
     if not path.is_file():
         return None
@@ -55,7 +61,9 @@ def load_previous_global(
         return None
     body = GlobalProfileBody.model_validate(data["profile"])
     active = data.get("active_profile")
-    return body, (active if isinstance(active, str) else None)
+    raw_agents = data.get("agents")
+    agents = [a for a in raw_agents if isinstance(a, str)] if isinstance(raw_agents, list) else []
+    return body, (active if isinstance(active, str) else None), agents
 
 
 __all__ = [

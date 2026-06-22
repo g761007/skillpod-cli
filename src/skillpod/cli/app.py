@@ -739,6 +739,14 @@ def switch_command(
         bool,
         typer.Option("--update", help="Global scope: re-download a URL profile even if cached."),
     ] = False,
+    agent: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--agent",
+            "-a",
+            help="Global scope: install to these agents only (repeatable; default all).",
+        ),
+    ] = None,
     manifest: ManifestOpt = Path("skillfile.yml"),
     json: JsonOpt = False,
 ) -> None:
@@ -755,6 +763,7 @@ def switch_command(
         dry_run=dry_run,
         back=back,
         update=update,
+        agents=agent or None,
     )
 
 
