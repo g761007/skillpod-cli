@@ -16,8 +16,7 @@ profile:
   name: project-manager
   description: Planning & coordination — specs, issues, comms, changelogs.
   type: role
-  agents:
-    - claude
+  # Target agents are chosen at switch time with --agent (default: all).
 
   skills:
     # Assumed already installed locally — give these a `source:` if not.

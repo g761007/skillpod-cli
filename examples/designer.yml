@@ -16,8 +16,7 @@ profile:
   name: designer
   description: Visual & UX design — interfaces, brand, mockups.
   type: role
-  agents:
-    - claude
+  # Target agents are chosen at switch time with --agent (default: all).
 
   skills:
     # Sourced from the public anthropics/skills repo (found by name).

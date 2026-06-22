@@ -519,7 +519,6 @@ profile:
   name: developer                  # optional; used as the filename on URL download
   description: Core dev skills      # optional; shown in listings
   type: role
-  agents: [claude, codex]
   skills:
     - audit                          # already installed: name only
     - name: polish                   # downloaded on switch from its source
@@ -528,17 +527,22 @@ profile:
       subpath: skills/polish         # optional
 ```
 
+A profile is just a skill set — it does **not** record target agents. Choose
+them at switch time with `--agent`/`-a` (repeatable); omit it to install to all
+supported agents.
+
 ```bash
-skillpod switch developer --scope global --dry-run   # preview the reconcile diff
-skillpod switch developer --scope global             # download missing, fan out, unlink dropped
-skillpod switch --scope global --back                # restore the previous global skill set
+skillpod switch developer --scope global --dry-run        # preview the reconcile diff
+skillpod switch developer --scope global                  # apply to all agents
+skillpod switch developer --scope global -a claude -a codex   # apply to specific agents
+skillpod switch --scope global --back                     # restore the previous global skill set
 ```
 
 On switch (global scope), skillpod:
 
 - **downloads** skills missing from `~/.skillpod/skills/` from their `source`
   (skills with no source that are not installed are skipped with a warning),
-- **fans out** the profile's skills to the declared agents,
+- **fans out** the profile's skills to the chosen agents (`--agent`, all by default),
 - **unlinks** managed skills the profile no longer lists — keeping the
   `~/.skillpod/skills/` cache copy so re-activation needs no re-download,
 - snapshots the previous set so `switch --back` can undo it,
@@ -560,7 +564,7 @@ each skill's source where possible, so it is portable):
 skillpod profile save developer
 ```
 
-See `examples/global-profile.yml`.
+See `examples/developer.yml` (plus `designer.yml` and `project-manager.yml`).
 
 ### Sub-shell sessions (`skillpod shell`)
 

@@ -1,10 +1,11 @@
-# global-profile.yml — a switchable, self-sourced GLOBAL profile
+# developer.yml — a switchable, self-sourced GLOBAL profile
 #
 # Place this file at ~/.skillpod/profiles/<name>.yml (e.g. developer.yml),
 # then activate it with:
 #
 #     skillpod switch developer --scope global --dry-run   # preview the reconcile
-#     skillpod switch developer --scope global             # apply it
+#     skillpod switch developer --scope global             # apply it (all agents)
+#     skillpod switch developer --scope global -a claude   # apply to one agent
 #     skillpod switch --scope global --back                # undo the last switch
 #
 # You can also switch straight from a URL (downloaded to ~/.skillpod/profiles/
@@ -19,7 +20,7 @@
 # skill directories (~/.<agent>/skills/) to match it:
 #
 #   - skills missing from ~/.skillpod/skills/ are downloaded from their source
-#   - skills the profile lists are fanned out to the declared agents
+#   - skills the profile lists are fanned out to the chosen agents (--agent, all by default)
 #   - managed skills the profile no longer lists are unlinked
 #     (the ~/.skillpod/skills/ cache copy is kept for instant re-activation)
 #
@@ -38,12 +39,9 @@ profile:
   # type: display-only label (role / project / task / team). Optional.
   type: role
 
-  # agents: which agent dirs receive fan-out. Subset of the supported set
-  # (claude, codex, gemini, cursor, opencode, antigravity). Optional —
-  # defaults to all supported agents when omitted.
-  agents:
-    - claude
-    - codex
+  # Note: a profile does NOT record target agents — choose them at switch time
+  # with `--agent`/`-a` (repeatable); omit to install to all supported agents
+  # (claude, codex, gemini, cursor, opencode, antigravity).
 
   # skills: each entry is either a bare name (must already be installed in
   # ~/.skillpod/skills/) or an object carrying an inline source so it can be

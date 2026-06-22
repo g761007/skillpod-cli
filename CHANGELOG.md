@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - managed skills the profile no longer lists are **unlinked**, keeping the
     `~/.skillpod/skills/` cache copy for instant re-activation;
   - the profile is recorded as the active global profile.
+  - **Target agents are chosen at switch time**, not in the profile — pass
+    `--agent`/`-a` (repeatable) to scope the fan-out, or omit it to install to
+    all supported agents. A profile is just a skill set.
   - `--dry-run` previews the download / link / unlink diff without applying.
   - A skill missing with no source to download from is **skipped with a warning**
     (so legacy name-only profiles still apply what they can).
