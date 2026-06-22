@@ -2087,6 +2087,12 @@ def test_switch_global_inside_project_with_confirm_succeeds(
 ) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
     proj = _project(tmp_path, "version: 1\nskills:\n  - audit\n")
+    # `switch --scope global` now reconciles, so the profile must exist.
+    profiles = tmp_path / ".skillpod" / "profiles"
+    profiles.mkdir(parents=True)
+    (profiles / "dev.yml").write_text(
+        "version: 1\nprofile:\n  skills: []\n", encoding="utf-8"
+    )
 
     result = runner.invoke(
         app,

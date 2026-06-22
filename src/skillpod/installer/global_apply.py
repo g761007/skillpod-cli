@@ -13,6 +13,7 @@ multi-skill repo, or the derived name of a root-is-skill repo).
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
@@ -65,6 +66,7 @@ class ApplyReport:
     downloaded: list[str] = field(default_factory=list)
     linked: list[str] = field(default_factory=list)
     unlinked: list[str] = field(default_factory=list)
+    skipped: list[str] = field(default_factory=list)
 
 
 def _target_agents(body: GlobalProfileBody) -> list[str]:
@@ -83,6 +85,15 @@ def _fully_linked(name: str, agents: list[str], home: Path | None) -> bool:
         is_managed_global_fanout(global_agent_skill_dir(a, name, home), name, home)
         for a in agents
     )
+
+
+def managed_global_skills(home: Path | None = None) -> set[str]:
+    """Skill names currently managed-fanned-out to any supported agent.
+
+    This is the set treated as "the active global skill set" — used by profile
+    snapshotting and history.
+    """
+    return _managed_fanned_out(list(DEFAULT_GLOBAL_AGENTS), home)
 
 
 def _managed_fanned_out(agents: list[str], home: Path | None) -> set[str]:
@@ -174,16 +185,23 @@ def execute_apply(
     succeeded, a mid-run download failure raises before anything is removed —
     the previously active skills stay linked, and at worst a few new skills are
     added. The caller writes the active-profile pointer only on full success.
-    """
-    if plan.unresolved:
-        raise ProfileError(
-            "cannot apply profile: skills missing from ~/.skillpod/skills/ with no "
-            f"source to download from: {', '.join(plan.unresolved)}"
-        )
 
+    Skills the profile lists but that are missing from ``~/.skillpod/skills/``
+    with no source to download from are **skipped with a warning** (recorded in
+    ``report.skipped``), so a legacy name-only profile still applies the skills
+    it can resolve instead of failing outright.
+    """
     agents = plan.agents
     other_agents = [a for a in DEFAULT_GLOBAL_AGENTS if a not in agents]
     report = ApplyReport(agents=agents)
+
+    for name in plan.unresolved:
+        warnings.warn(
+            f"skill '{name}' is not installed in ~/.skillpod/skills/ and the "
+            "profile gives no source to download it from — skipping",
+            stacklevel=2,
+        )
+        report.skipped.append(name)
 
     for skill in plan.to_download:
         _download_skill(skill, agents, force=force, home=home)
@@ -234,5 +252,6 @@ __all__ = [
     "ApplyPlan",
     "ApplyReport",
     "execute_apply",
+    "managed_global_skills",
     "plan_apply",
 ]

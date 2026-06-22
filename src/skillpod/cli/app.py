@@ -25,7 +25,6 @@ from skillpod.cli.commands import (
     install_cmd,
     list_cmd,
     profile_add,
-    profile_apply,
     profile_create,
     profile_current,
     profile_diff,
@@ -33,6 +32,7 @@ from skillpod.cli.commands import (
     profile_import,
     profile_list,
     profile_remove,
+    profile_save,
     profile_show,
     profile_use,
 )
@@ -706,7 +706,12 @@ def shell_command(
 
 @app.command("switch", help="Set the active profile for a scope (project/global/session).")
 def switch_command(
-    name: Annotated[str, typer.Argument(help="Profile name to activate.")],
+    name: Annotated[
+        str,
+        typer.Argument(
+            help="Profile name, or (global scope) a URL / owner/repo/file.yml to download.",
+        ),
+    ] = "",
     scope: Annotated[
         str | None,
         typer.Option(
@@ -719,8 +724,20 @@ def switch_command(
         bool,
         typer.Option(
             "--global",
-            help="Confirm writing the global active-profile when inside a project root.",
+            help="Confirm changing global skills when inside a project root.",
         ),
+    ] = False,
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Global scope: preview the reconcile without applying."),
+    ] = False,
+    back: Annotated[
+        bool,
+        typer.Option("--back", help="Global scope: restore the previous global skill set."),
+    ] = False,
+    update: Annotated[
+        bool,
+        typer.Option("--update", help="Global scope: re-download a URL profile even if cached."),
     ] = False,
     manifest: ManifestOpt = Path("skillfile.yml"),
     json: JsonOpt = False,
@@ -735,6 +752,9 @@ def switch_command(
         manifest_path=manifest_path,
         json_output=json,
         yes_global=yes_global,
+        dry_run=dry_run,
+        back=back,
+        update=update,
     )
 
 
@@ -773,23 +793,25 @@ def profile_use_cmd(
 
 
 @profile_app.command(
-    "apply",
-    help="Reconcile global skills to a global profile (downloads missing skills).",
+    "save",
+    help="Snapshot the current global skills into a global profile (recovers sources).",
 )
-def profile_apply_cmd(
-    name: Annotated[str, typer.Argument(help="Global profile name to apply.")],
+def profile_save_cmd(
+    name: Annotated[str, typer.Argument(help="Name for the saved global profile.")],
+    description: Annotated[
+        str | None,
+        typer.Option("--description", "-d", help="Optional human-readable description."),
+    ] = None,
     yes: Annotated[
         bool,
-        typer.Option("--yes", "-y", help="Execute the reconcile (default previews only)."),
+        typer.Option("--yes", "-y", help="Overwrite an existing profile of the same name."),
     ] = False,
-    manifest: ManifestOpt = Path("skillfile.yml"),
     json: JsonOpt = False,
 ) -> None:
-    manifest_path = manifest if manifest.is_absolute() else (Path.cwd() / manifest).resolve()
-    profile_apply.run(
+    profile_save.run(
         name,
-        project_root=_project_root(manifest_path),
-        yes=yes,
+        description=description,
+        overwrite=yes,
         json_output=json,
     )
 
