@@ -1,0 +1,35 @@
+# designer.yml — example GLOBAL profile for a UI/UX design context.
+#
+# Copy to ~/.skillpod/profiles/designer.yml, then activate it with:
+#
+#     skillpod switch designer --scope global --dry-run   # preview
+#     skillpod switch designer --scope global             # apply
+#
+# See examples/global-profile.yml for the full field reference. Skills with a
+# `source` are downloaded on switch (matched by `name` within the source);
+# bare-name skills must already be installed in ~/.skillpod/skills/ (or carry
+# their own source).
+
+version: 1
+
+profile:
+  name: designer
+  description: Visual & UX design — interfaces, brand, mockups.
+  type: role
+  agents:
+    - claude
+
+  skills:
+    # Sourced from the public anthropics/skills repo (found by name).
+    - name: frontend-design
+      source: anthropics/skills
+    - name: brand-guidelines
+      source: anthropics/skills
+    - name: canvas-design
+      source: anthropics/skills
+
+    # Assumed already installed locally — give these a `source:` if not.
+    - web-design-guidelines
+    - theme-factory
+    - delight
+    - colorize

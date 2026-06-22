@@ -1,0 +1,34 @@
+# project-manager.yml — example GLOBAL profile for planning & coordination.
+#
+# Copy to ~/.skillpod/profiles/project-manager.yml, then activate it with:
+#
+#     skillpod switch project-manager --scope global --dry-run   # preview
+#     skillpod switch project-manager --scope global             # apply
+#
+# See examples/global-profile.yml for the full field reference. Skills with a
+# `source` are downloaded on switch (matched by `name` within the source);
+# bare-name skills must already be installed in ~/.skillpod/skills/ (or carry
+# their own source).
+
+version: 1
+
+profile:
+  name: project-manager
+  description: Planning & coordination — specs, issues, comms, changelogs.
+  type: role
+  agents:
+    - claude
+
+  skills:
+    # Assumed already installed locally — give these a `source:` if not.
+    - brainstorming
+    - clarify
+    - writing-plans
+    - doc-coauthoring
+    - internal-comms
+    - to-prd
+    - to-issues
+    - triage
+    - changelog-generator
+    - handoff
+    - distill
