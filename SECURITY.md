@@ -7,8 +7,8 @@ the 0.x series. Once 1.0.0 ships the policy will be revisited.
 
 | Version | Supported |
 | --- | --- |
-| 0.5.x   | ✅ |
-| < 0.5   | ❌ |
+| 0.6.x   | ✅ |
+| < 0.6   | ❌ |
 
 ## Reporting a vulnerability
 

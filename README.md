@@ -15,6 +15,8 @@
 > **Pod-style dependency manager for AI coding agent skills.**
 > One declarative manifest, multi-agent fan-out, switchable workspace profiles.
 
+> **Pre-1.0 notice:** skillpod is under active development. The manifest, lockfile, and profile schema may change in breaking ways before the 1.0 schema freeze.
+
 `skillpod` brings the `package.json` + lockfile workflow to AI agent skills.
 Declare which skills your project depends on, lock them to a specific git
 commit, then materialise them once into `.skillpod/skills/` and fan them out
@@ -61,27 +63,29 @@ uv tool install skillpod
 
 Requires Python **3.11+**.
 
+Enable shell completion (bash, zsh, fish) by running `skillpod --install-completion` once after install.
+
 ---
 
-## Quickstart
+## Quickstart (60 seconds)
+
+From an empty directory, run these four commands to go from nothing to a real skill directory fanned out into `.claude/skills/`:
 
 ```bash
-# 1. Bootstrap a manifest in the current project
+# 1. Bootstrap a manifest (writes skillfile.yml + adds .skillpod/ to .gitignore)
 skillpod init
 
-# 2. Add a skill (resolves through skills.sh by default)
-skillpod add audit
+# 2. Add a skill from a public repo — preview what's available first
+skillpod add vercel-labs/agent-skills -l
 
-# 3. Install everything declared in skillfile.yml
-skillpod install
+# 3. Install a specific skill without interactive prompts
+skillpod add vercel-labs/agent-skills -s web-design-guidelines -y
 
-# 4. Inspect what landed where
+# 4. Confirm what landed
 skillpod list
 ```
 
-### What changed on disk
-
-After running the four commands above:
+After step 3, the skill is in two places:
 
 ```
 project/
@@ -89,10 +93,11 @@ project/
 ├── skillfile.lock      ← pins each skill to a git commit + sha256
 └── .skillpod/
     └── skills/
-        └── audit/      ← real directory copy (survives cache clears)
-.claude/skills/audit    →  ../../.skillpod/skills/audit
-.codex/skills/audit     →  ../../.skillpod/skills/audit
+        └── web-design-guidelines/   ← real directory copy (survives cache clears)
+.claude/skills/web-design-guidelines →  ../../.skillpod/skills/web-design-guidelines
 ```
+
+`.skillpod/skills/` is the install root; `.claude/skills/` is the fan-out that your agent reads.
 
 > **Tip:** Commit `skillfile.lock` alongside `skillfile.yml` so teammates and CI reproduce exactly the same skills.
 
@@ -365,8 +370,9 @@ IDEs can use this schema for autocomplete and validation.
 | `skillpod global`           | Manage global skills: list, link/unlink to agents, consolidate, audit   |
 | `skillpod adapter`          | Inspect the active adapter registry                                      |
 
-`--help` on any subcommand shows full options. `--json` produces
-machine-readable output where it makes sense.
+`--help` on any subcommand shows full options.
+
+> **Machine-readable output / CI:** Most commands accept `--json` and print structured JSON to stdout. Use this for scripting, piping into `jq`, or integrating with CI pipelines — for example `skillpod list --json`, `skillpod status --json`, `skillpod global list --json`.
 
 ### `skillpod global list`
 
@@ -436,6 +442,26 @@ skillpod global archive my-linter code-review
 # machine-readable output for scripting
 skillpod global archive '*' --json
 ```
+
+---
+
+## Security model — what you're trusting
+
+Adding a skill is like adding a dependency: you are pulling external code into your AI agent's context. Here is what skillpod does and does not gate for you.
+
+**Registry trust policy (skills.sh only)**
+
+The `registry.skills_sh` block in `skillfile.yml` (`allow_unverified`, `min_installs`, `min_stars`) is enforced **exclusively on results returned by the skills.sh registry** — i.e. when you run `skillpod search` or resolve a skill by bare name through the registry. The defaults are `allow_unverified: false`, `min_installs: 0`, `min_stars: 0`.
+
+**git URL / `owner/repo` / local-path sources are not gated by this policy.** When you pass a URL, a GitHub shorthand, or a local directory directly to `skillpod add`, you are trusting that source directly — no install or star threshold is checked.
+
+**What a skill can do**
+
+A skill's `SKILL.md` file is read into your AI agent's context window as instructions. Review the source repo before adding a skill, the same way you would review a new package before `npm install`-ing it.
+
+**Lockfile integrity**
+
+Once a skill is installed, `skillfile.lock` pins its git commit SHA and a sha256 of its contents. Re-running `skillpod install` from the lockfile reproduces the exact same content — nothing can silently change underneath you. Run `skillpod doctor` to verify the current install matches the lock.
 
 ---
 
