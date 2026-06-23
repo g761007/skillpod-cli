@@ -2331,3 +2331,33 @@ def test_switch_composition_project_scope_raises(
 
     assert result.exit_code == 1
     assert "cannot be persisted" in (result.stdout + result.stderr)
+
+
+# ---- version / help ---------------------------------------------------------
+
+
+def test_version_flag_prints_version_and_exits(runner: CliRunner) -> None:
+    """`skillpod --version` exits 0 and prints `skillpod <version>`."""
+    import skillpod
+
+    result = runner.invoke(app, ["--version"])
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert result.stdout.startswith("skillpod ")
+    assert result.stdout.split()[1] == skillpod.__version__
+
+
+def test_no_args_shows_help(runner: CliRunner) -> None:
+    """`skillpod` with no args still triggers no_args_is_help."""
+    result = runner.invoke(app, [])
+
+    # Typer exits with code 0 (or 2 on some versions) and emits usage text.
+    assert "Usage:" in result.stdout
+    assert "Commands" in result.stdout
+
+
+def test_dunder_version_is_non_empty_string() -> None:
+    import skillpod
+
+    assert isinstance(skillpod.__version__, str)
+    assert skillpod.__version__

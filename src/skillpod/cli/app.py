@@ -7,6 +7,7 @@ from typing import Annotated
 
 import typer
 
+from skillpod import __version__
 from skillpod.cli.commands import (
     adapter as adapter_cmd,
 )
@@ -74,8 +75,29 @@ app = typer.Typer(
     name="skillpod",
     help="Project-scoped, reproducible skill dependency manager.",
     no_args_is_help=True,
-    add_completion=False,
+    add_completion=True,
 )
+
+
+def _version_callback(value: bool) -> None:
+    if value:
+        typer.echo(f"skillpod {__version__}")
+        raise typer.Exit()
+
+
+@app.callback()
+def _main(
+    version: Annotated[
+        bool,
+        typer.Option(
+            "--version",
+            callback=_version_callback,
+            is_eager=True,
+            help="Show the version and exit.",
+        ),
+    ] = False,
+) -> None:
+    ...
 
 global_app = typer.Typer(
     help="Inspect and archive global agent skill directories.",

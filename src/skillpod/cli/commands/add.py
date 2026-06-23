@@ -98,8 +98,11 @@ def _run_legacy_add(
         "commit": added.resolved.commit,
     }
     human = f"Added {skill_name} ({added.resolved.source_kind})"
-    if added.resolved.commit:
-        human += f" at {added.resolved.commit[:8]}"
+    url_or_path = added.resolved.url or str(added.resolved.path)
+    if url_or_path:
+        human += f" from {url_or_path}"
+        if added.resolved.commit:
+            human += f"@{added.resolved.commit[:8]}"
     emit(payload, json_output=json_output, human=human)
 
 
