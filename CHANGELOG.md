@@ -5,6 +5,40 @@ All notable changes to **skillpod** are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Profile composition now works for global apply** —
+  `skillpod switch dev+reviewer --scope global` unions the operands'
+  source-bearing skills, downloads what is missing, and fans out the combined
+  set. Operands must be **local profile names** (a `+URL` operand is rejected).
+  Same-named skills resolve **left-wins**: the leftmost operand that declares a
+  skill keeps its source; a later operand with a genuinely different source is
+  dropped with a warning. `--dry-run`, `--back`, and `--agent` all work with a
+  composed switch.
+- **`skillpod schema --profile`** — emit the JSON Schema for a global profile
+  file (`~/.skillpod/profiles/<name>.yml`); the default still emits the
+  `skillfile.yml` schema. Generated `schemas/global-profile.schema.json` is
+  committed for editor integration.
+
+### Changed
+
+- **Profile composition is no longer experimental.** The one-time stderr
+  warning and the `SKILLPOD_DISABLE_EXPERIMENTAL_WARNING` suppressor are
+  removed; composition semantics (union, left-wins dedup, session + global
+  scopes) are stable. The frozen profile resolution order and the two-layer
+  profile model are now documented in the README.
+
+### Internal
+
+- New `skillpod.profile.compose.compose_global_bodies` — a source-bearing union
+  of multiple global profiles with left-wins conflict handling.
+- 11 new tests (global compose union + left-wins conflict + remote-operand
+  rejection, end-to-end composite `switch --scope global`, `--back` round-trip,
+  `schema --profile`); the 3 obsolete composition experimental-warning tests
+  removed. `ruff` and `mypy --strict` clean across 85 files.
+
 ## [0.6.5] — 2026-06-26
 
 ### Added

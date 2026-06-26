@@ -346,6 +346,10 @@ from the pydantic manifest models. Reproduce it with
 `skillpod schema --output schemas/skillfile.schema.json`. VS Code and JetBrains
 IDEs can use this schema for autocomplete and validation.
 
+Global profile files have their own schema at
+[`schemas/global-profile.schema.json`](./schemas/global-profile.schema.json);
+reproduce it with `skillpod schema --profile --output schemas/global-profile.schema.json`.
+
 ---
 
 ## Commands
@@ -630,21 +634,39 @@ activation:
 | `merge`    | Union of project + global skills and agents; project wins on conflict |
 | `fallback` | Project profile first; falls back to global if not found in project |
 
-### Profile composition (experimental)
+### Profile composition
 
-Combine profiles with `+` to activate the union of their skills and agents:
+Combine profiles with `+` to activate the union of their skills and agents.
+Composition works in two scopes:
 
 ```bash
-# Session-scope only (composition cannot be persisted to files)
+# Session scope — env export, no files touched
 eval "$(skillpod switch reviewer+frontend --scope session)"
-
 skillpod resolve   # union of reviewer + frontend skills
+
+# Global scope — download + fan out the combined set
+skillpod switch dev+reviewer --scope global --agent claude
 ```
 
-A warning is printed on first use:
-`warning: profile composition is experimental — semantics may change in v0.7.x`
+Operands must be **local profile names** (a `+URL` operand is rejected). Skills
+union left-to-right, de-duplicated by name. When two operands declare the same
+skill name with a **different source**, the **leftmost wins** and a warning is
+printed. `--dry-run`, `--back`, and `--agent` all work with a composed switch.
 
-Suppress with `SKILLPOD_DISABLE_EXPERIMENTAL_WARNING=1`.
+### Resolution order
+
+When more than one profile source could apply, skillpod resolves in this fixed
+order (frozen as of v0.7.0):
+
+```
+CLI --profile  >  state active (session env > project file > global file)  >  activation.default_profile  >  none
+```
+
+A global profile file (`~/.skillpod/profiles/<name>.yml`) is the **source-bearing**
+form — each skill may carry an inline `source`. For filter-mode resolution it
+projects down to a name-only view, so one profile works both as a downloadable
+skill set (`switch --scope global`) and as a read-time filter (`resolve --profile`).
+Export the profile-file JSON Schema with `skillpod schema --profile`.
 
 ### Profile diff, export, and import
 
