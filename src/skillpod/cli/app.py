@@ -385,7 +385,7 @@ def doctor(
     )
 
 
-@app.command("schema", help="Print or write the JSON Schema for skillfile.yml.")
+@app.command("schema", help="Print or write a skillpod JSON Schema (skillfile.yml or --profile).")
 def schema_command(
     output: Annotated[
         Path | None,
@@ -395,6 +395,13 @@ def schema_command(
             help="Write the schema to this path. Use '-' to write to stdout (JSON form).",
         ),
     ] = None,
+    profile: Annotated[
+        bool,
+        typer.Option(
+            "--profile",
+            help="Emit the global profile file schema instead of the skillfile.yml schema.",
+        ),
+    ] = False,
     json: JsonOpt = False,
 ) -> None:
     project_root = Path.cwd()
@@ -403,6 +410,7 @@ def schema_command(
         output=output,
         json_output=json or output is not None,
         write=output is not None and str(output) != "-",
+        profile=profile,
     )
 
 

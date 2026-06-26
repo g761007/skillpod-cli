@@ -1,0 +1,135 @@
+{
+  "$defs": {
+    "GlobalProfileBody": {
+      "additionalProperties": false,
+      "description": "The ``profile:`` body of a global profile file.",
+      "properties": {
+        "agents": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Agents",
+          "type": "array"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "skills": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/GlobalProfileSkill"
+          },
+          "title": "Skills",
+          "type": "array"
+        },
+        "type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Type"
+        }
+      },
+      "title": "GlobalProfileBody",
+      "type": "object"
+    },
+    "GlobalProfileSkill": {
+      "additionalProperties": false,
+      "description": "One skill entry inside a global profile, optionally source-bearing.",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ref"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source"
+        },
+        "subpath": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subpath"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "GlobalProfileSkill",
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/g761007/skillpod-cli/schemas/global-profile.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "JSON Schema for a skillpod global profile file (~/.skillpod/profiles/<name>.yml).",
+  "properties": {
+    "profile": {
+      "$ref": "#/$defs/GlobalProfileBody"
+    },
+    "version": {
+      "const": 1,
+      "default": 1,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "profile"
+  ],
+  "title": "GlobalProfile",
+  "type": "object"
+}
