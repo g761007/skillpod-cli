@@ -5,7 +5,7 @@ All notable changes to **skillpod** are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.6.5] — 2026-06-26
 
 ### Added
 
@@ -38,6 +38,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Global profile files gain optional `name` and `description` fields (like a skill).
 - Skill entries in a global profile accept both the bare-name form and the object
   form `{name, source, ref?, subpath?}`.
+- **`skillpod --version`** — eager flag on the main callback that prints
+  `skillpod <version>` and exits 0, while preserving `no_args_is_help`.
+- **Shell completion enabled** (`add_completion=True`) — `skillpod` now ships
+  `--install-completion` and `--show-completion`.
+
+### Changed
+
+- **`__version__` is now single-sourced from package metadata**
+  (`importlib.metadata.version("skillpod")`, with a `0.0.0+dev` fallback for an
+  uninstalled source tree). Previously it was hardcoded and had drifted to
+  `0.5.6` while the package shipped `0.6.4`.
+- **`skillpod add` human output now shows the resolved `url@commit`** so you can
+  see exactly which source and commit were pulled into your agents.
+
+### Docs
+
+- README gains a **Quickstart** path, a **Security model / what you're
+  trusting** section (registry trust ≠ git/local trust; `SKILL.md` is read into
+  agent context; pin commits via the lockfile), a `--json` scriptability
+  highlight, and a pre-1.0 schema-stability notice.
+- `SECURITY.md` supported-version table updated from `0.5.x` to `0.6.x`.
 
 ### Internal
 
@@ -481,7 +502,7 @@ required to publish.
 - pytest suite covering manifest, lockfile, source resolution, installer,
   and CLI smoke tests.
 
-[Unreleased]: https://github.com/g761007/skillpod-cli/compare/v0.6.4...HEAD
+[0.6.5]: https://github.com/g761007/skillpod-cli/compare/v0.6.4...v0.6.5
 [0.6.4]: https://github.com/g761007/skillpod-cli/compare/v0.6.3...v0.6.4
 [0.6.3]: https://github.com/g761007/skillpod-cli/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/g761007/skillpod-cli/compare/v0.6.1...v0.6.2

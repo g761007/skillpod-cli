@@ -67,7 +67,7 @@ Enable shell completion (bash, zsh, fish) by running `skillpod --install-complet
 
 ---
 
-## Quickstart (60 seconds)
+## Quickstart
 
 From an empty directory, run these four commands to go from nothing to a real skill directory fanned out into `.claude/skills/`:
 
@@ -696,6 +696,7 @@ Each skill in the output includes a `"layer"` field: `project`, `user_skill`,
 | 0.6.2     | shipped     | Safe Switching — `switch`, `profile use/current`, scoped state (`SKILLPOD_ACTIVE_PROFILE` env > project file > global file) |
 | 0.6.3     | shipped     | Session Shell — `skillpod shell <profile>` spawns `$SHELL` with profile pre-activated, nest guard, PS1 prefix |
 | 0.6.4     | shipped     | Composition Preview — `+` operator unions profiles; `profile diff/export/import` |
+| 0.6.5     | shipped     | Global profile switch (download + fan-out + `--back`/URL/`save`); `--version`; shell completion; richer `add` output |
 | 0.7.0     | planned     | Profile model beta — schema + resolver precedence + activation scope stable |
 | 0.8.0     | planned     | Local-first visual management UI (`skillpod ui`)            |
 | 1.0.0     | planned     | schema freeze                                               |
