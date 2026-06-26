@@ -85,10 +85,10 @@ def test_compose_multi_unknown_profile_raises(tmp_path: Path) -> None:
         compose_effective_skillset(manifest, tmp_path, profile_name="dev+nonexistent")
 
 
-def test_compose_multi_experimental_warning(
+def test_composition_emits_no_experimental_warning(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.delenv("SKILLPOD_DISABLE_EXPERIMENTAL_WARNING", raising=False)
+    """Composition is stable as of v0.7.0 — no experimental stderr warning."""
     manifest = _manifest(
         "version: 1\n"
         "skills: [audit, review]\n"
@@ -103,47 +103,5 @@ def test_compose_multi_experimental_warning(
     monkeypatch.setattr("sys.stderr", buf)
 
     compose_effective_skillset(manifest, tmp_path, profile_name="dev+reviewer")
-
-    assert "experimental" in buf.getvalue()
-
-
-def test_compose_single_no_warning(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.delenv("SKILLPOD_DISABLE_EXPERIMENTAL_WARNING", raising=False)
-    manifest = _manifest(
-        "version: 1\n"
-        "skills: [audit]\n"
-        "profiles:\n"
-        "  dev:\n"
-        "    skills: [audit]\n"
-    )
-
-    buf = io.StringIO()
-    monkeypatch.setattr("sys.stderr", buf)
-
-    compose_effective_skillset(manifest, tmp_path, profile_name="dev")
 
     assert "experimental" not in buf.getvalue()
-
-
-def test_experimental_warning_suppressed(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv("SKILLPOD_DISABLE_EXPERIMENTAL_WARNING", "1")
-    manifest = _manifest(
-        "version: 1\n"
-        "skills: [audit, review]\n"
-        "profiles:\n"
-        "  dev:\n"
-        "    skills: [audit]\n"
-        "  reviewer:\n"
-        "    skills: [review]\n"
-    )
-
-    buf = io.StringIO()
-    monkeypatch.setattr("sys.stderr", buf)
-
-    compose_effective_skillset(manifest, tmp_path, profile_name="dev+reviewer")
-
-    assert buf.getvalue() == ""

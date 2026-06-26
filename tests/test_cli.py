@@ -2330,10 +2330,22 @@ def test_switch_composition_project_scope_raises(
     )
 
     assert result.exit_code == 1
-    assert "cannot be persisted" in (result.stdout + result.stderr)
+    assert "cannot be a project pointer" in (result.stdout + result.stderr)
 
 
 # ---- version / help ---------------------------------------------------------
+
+
+def test_schema_profile_flag_emits_global_profile_schema(runner: CliRunner) -> None:
+    """`skillpod schema --profile --json` emits the GlobalProfile file schema."""
+    import json as _json
+
+    result = runner.invoke(app, ["schema", "--profile", "--json"])
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    schema = _json.loads(result.stdout)
+    assert schema["title"] == "GlobalProfile"
+    assert set(schema["properties"]) == {"version", "profile"}
 
 
 def test_version_flag_prints_version_and_exits(runner: CliRunner) -> None:

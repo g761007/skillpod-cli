@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import os
-import sys
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -137,16 +135,6 @@ def _apply_activation_policy(
     )
 
 
-def _emit_experimental_warning() -> None:
-    """Print the composition experimental warning to stderr (once per process)."""
-    if os.environ.get("SKILLPOD_DISABLE_EXPERIMENTAL_WARNING") == "1":
-        return
-    sys.stderr.write(
-        "warning: profile composition is experimental"
-        " — semantics may change in v0.7.x\n"
-    )
-
-
 def _compose_multi(
     names: list[str],
     *,
@@ -211,7 +199,6 @@ def compose_effective_skillset(
 
     # Composition path: "dev+reviewer" — union of multiple profiles
     if profile_name is not None and "+" in profile_name:
-        _emit_experimental_warning()
         names = parse_profile_expr(profile_name)
         synthetic_profile = _compose_multi(
             names,

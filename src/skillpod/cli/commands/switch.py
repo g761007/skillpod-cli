@@ -20,6 +20,7 @@ from skillpod.installer.global_apply import (
     plan_apply,
 )
 from skillpod.installer.global_install import DEFAULT_GLOBAL_AGENTS
+from skillpod.profile.compose import compose_global_bodies
 from skillpod.profile.errors import ProfileError
 from skillpod.profile.fetch import resolve_profile_target
 from skillpod.profile.models import GlobalProfileBody
@@ -128,10 +129,12 @@ def run(
     home: Path | None = None,
 ) -> None:
     def _run() -> None:
-        # Composition expressions are session-scope only (cannot be persisted).
-        if "+" in name and scope != "session":
+        # Composition (`a+b`) is allowed for global (materialised) and session
+        # (env export); a project pointer cannot represent a composite set.
+        if "+" in name and scope == "project":
             raise ProfileError(
-                "composition expressions cannot be persisted; use --scope session"
+                "composition expressions cannot be a project pointer; "
+                "use --scope global or --scope session"
             )
 
         # --- Global: materialise / undo -----------------------------------
@@ -167,7 +170,12 @@ def run(
                 )
                 return
 
-            resolved_name, body = resolve_profile_target(name, home=home, update=update)
+            if "+" in name:
+                resolved_name, body = compose_global_bodies(name, home=home)
+            else:
+                resolved_name, body = resolve_profile_target(
+                    name, home=home, update=update
+                )
             _apply_global(
                 resolved_name,
                 body,
