@@ -42,6 +42,9 @@ from skillpod.cli.commands import (
     init as init_cmd,
 )
 from skillpod.cli.commands import (
+    link as link_cmd,
+)
+from skillpod.cli.commands import (
     outdated as outdated_cmd,
 )
 from skillpod.cli.commands import (
@@ -592,6 +595,71 @@ def global_doctor_cmd(
     global_doctor.run(
         project_root=_project_root(manifest_path),
         manifest_path=manifest_path,
+        json_output=json,
+    )
+
+
+LinkAgents = Annotated[
+    list[str] | None,
+    typer.Option("--agent", "-a", help="Target agent(s). Repeatable. Defaults to all."),
+]
+GlobalScope = Annotated[
+    bool,
+    typer.Option("--global", "-g", help="Act on the global skill set instead of this project."),
+]
+
+
+@app.command(
+    "link",
+    help=(
+        "Make a skill visible to your agents. Project scope by default, -g for "
+        "global. Never downloads: an already-installed skill is copied from "
+        "~/.skillpod/skills/ if the project does not have it yet."
+    ),
+)
+def link_command(
+    skill: Annotated[str, typer.Argument(help="Skill name to link.")],
+    agent: LinkAgents = None,
+    is_global: GlobalScope = False,
+    yes: Annotated[
+        bool, typer.Option("--yes", "-y", help="Overwrite existing entries (global scope).")
+    ] = False,
+    manifest: ManifestOpt = Path("skillfile.yml"),
+    json: JsonOpt = False,
+) -> None:
+    manifest_path = manifest if manifest.is_absolute() else (Path.cwd() / manifest).resolve()
+    link_cmd.run_link(
+        project_root=_project_root(manifest_path),
+        manifest_path=manifest_path,
+        skill_name=skill,
+        agents=agent,
+        is_global=is_global,
+        yes=yes,
+        json_output=json,
+    )
+
+
+@app.command(
+    "unlink",
+    help=(
+        "Hide a skill from your agents without deleting it. The materialised "
+        "copy stays, so re-linking needs no download."
+    ),
+)
+def unlink_command(
+    skill: Annotated[str, typer.Argument(help="Skill name to unlink.")],
+    agent: LinkAgents = None,
+    is_global: GlobalScope = False,
+    manifest: ManifestOpt = Path("skillfile.yml"),
+    json: JsonOpt = False,
+) -> None:
+    manifest_path = manifest if manifest.is_absolute() else (Path.cwd() / manifest).resolve()
+    link_cmd.run_unlink(
+        project_root=_project_root(manifest_path),
+        manifest_path=manifest_path,
+        skill_name=skill,
+        agents=agent,
+        is_global=is_global,
         json_output=json,
     )
 
