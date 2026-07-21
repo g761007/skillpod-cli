@@ -519,7 +519,7 @@ def test_source_mode_auto_detects_master_default_branch(
         app,
         [
             "add",
-            f"file://{repo_path}",
+            repo_path.as_uri(),
             "-y",
             "--manifest",
             str(proj / "skillfile.yml"),
@@ -548,7 +548,7 @@ def test_source_mode_explicit_ref_is_respected(
         app,
         [
             "add",
-            f"file://{repo_path}",
+            repo_path.as_uri(),
             "--ref",
             "develop",
             "-y",
@@ -578,7 +578,7 @@ def test_source_mode_root_is_skill_installs_under_derived_name(
         app,
         [
             "add",
-            f"file://{repo_path}",
+            repo_path.as_uri(),
             "-y",
             "--manifest",
             str(proj / "skillfile.yml"),
@@ -594,7 +594,7 @@ def test_source_mode_root_is_skill_installs_under_derived_name(
     manifest_text = (proj / "skillfile.yml").read_text(encoding="utf-8")
     assert "name: vibe" in manifest_text
     assert "type: git" in manifest_text
-    assert f"file://{repo_path}" in manifest_text
+    assert repo_path.as_uri() in manifest_text
 
 
 def test_source_mode_root_is_skill_global_uses_derived_name(
@@ -616,7 +616,7 @@ def test_source_mode_root_is_skill_global_uses_derived_name(
         app,
         [
             "add",
-            f"file://{repo_path}",
+            repo_path.as_uri(),
             "-g",
             "-y",
         ],
@@ -644,7 +644,7 @@ def test_source_mode_root_is_skill_reinstall_via_install_succeeds(
         app,
         [
             "add",
-            f"file://{repo_path}",
+            repo_path.as_uri(),
             "-y",
             "--manifest",
             str(proj / "skillfile.yml"),
@@ -852,7 +852,7 @@ def test_add_records_the_subpath_for_a_nested_git_skill(
         app,
         [
             "add",
-            f"file://{repo_path}",
+            repo_path.as_uri(),
             "--skill",
             "pdf",
             "-y",
@@ -891,7 +891,7 @@ def test_skills_from_different_directories_get_their_own_sources(
         app,
         [
             "add",
-            f"file://{repo}",
+            repo.as_uri(),
             "--skill",
             "writer",
             "--skill",

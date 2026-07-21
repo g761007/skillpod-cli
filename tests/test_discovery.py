@@ -144,3 +144,21 @@ def test_discover_tolerates_bad_frontmatter(tmp_path: Path) -> None:
 
 def test_discover_returns_empty_for_nonexistent_root(tmp_path: Path) -> None:
     assert discover_skills(tmp_path / "does-not-exist") == []
+
+
+def test_rel_path_is_posix_regardless_of_platform(tmp_path: Path) -> None:
+    """`rel_path` ends up in `sources[].subpath` in a committed skillfile.yml.
+
+    Built with the OS separator it would be `skills\\pdf` on Windows — which
+    breaks two ways: the manifest stops being portable to Linux, and
+    `PurePosixPath` reads the whole thing as a single segment, so the nesting
+    is lost and the skill resolves against the repo root instead.
+    """
+    nested = tmp_path / "skills" / "pdf"
+    nested.mkdir(parents=True)
+    (nested / "SKILL.md").write_text("---\ndescription: pdf\n---\n", encoding="utf-8")
+
+    [skill] = discover_skills(tmp_path)
+
+    assert skill.rel_path == "skills/pdf"
+    assert "\\" not in skill.rel_path
