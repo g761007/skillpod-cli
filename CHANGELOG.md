@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-07-21
+
+The **recommendation model**: `skillfile.yml` declares what a project
+*recommends*; each developer decides what they actually run.
+
+0.7.0 and 0.8.0 were developed but never published — their work ships here.
+0.7.0 was the profile-model beta (composition in global apply,
+`schema --profile`); 0.8.0 was the recommendation model core (install records,
+`prefer_global`, `global update`, the `status` dashboard).
+
 ### Migrating from 0.6.x
 
 Nothing to do by hand. The first `skillpod install` after upgrading reads any
@@ -689,6 +699,7 @@ required to publish.
 
 [0.6.5]: https://github.com/g761007/skillpod-cli/compare/v0.6.4...v0.6.5
 [0.6.4]: https://github.com/g761007/skillpod-cli/compare/v0.6.3...v0.6.4
+[0.9.0]: https://github.com/g761007/skillpod-cli/compare/v0.6.5...v0.9.0
 [0.6.3]: https://github.com/g761007/skillpod-cli/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/g761007/skillpod-cli/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/g761007/skillpod-cli/compare/v0.6.0...v0.6.1
