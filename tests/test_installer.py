@@ -29,7 +29,7 @@ from skillpod.installer import (
 from skillpod.installer.adapter import InstallMode
 from skillpod.installer.adapter_default import IdentityAdapter
 from skillpod.installer.adapter_registry import register_adapter
-from skillpod.lockfile.integrity import hash_directory
+from skillpod.integrity import hash_directory
 from tests._git_fixtures import make_skill_repo
 
 _REGISTRY_BASE = "https://registry.test"

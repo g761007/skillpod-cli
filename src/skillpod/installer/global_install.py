@@ -31,7 +31,7 @@ from skillpod.installer.paths import (
     global_skill_dir,
     is_managed_global_fanout,
 )
-from skillpod.lockfile.integrity import hash_directory
+from skillpod.integrity import hash_directory
 from skillpod.sources.discovery import DiscoveredSkill
 from skillpod.sources.git import populate_cache, resolve_default_branch, resolve_ref
 from skillpod.sources.spec import SourceSpec

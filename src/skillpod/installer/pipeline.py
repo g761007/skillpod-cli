@@ -41,8 +41,8 @@ from skillpod.installer.fanout import (
 from skillpod.installer.paths import agent_skill_dir, project_skill_dir
 from skillpod.installer.resolve import resolve_skill
 from skillpod.installer.user_skills import discover_user_skills, resolve_user_skill
+from skillpod.integrity import hash_directory
 from skillpod.lockfile import io as lockfile_io
-from skillpod.lockfile.integrity import hash_directory
 from skillpod.lockfile.models import LockedSkill, Lockfile
 from skillpod.manifest import load as load_manifest
 from skillpod.manifest.models import AgentEntry, SkillEntry
