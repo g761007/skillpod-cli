@@ -145,18 +145,16 @@ def test_project_profile_switch_unlinks_excluded_skills(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "The install pipeline never inspects ~/.skillpod/skills/, so a "
-        "globally-present skill is cloned and materialised again per project. "
-        "Fixed in Phase 3 (install.prefer_global)."
-    ),
-)
 def test_project_install_skips_skill_already_present_globally(
     runner: CliRunner, tmp_path: Path, isolated_home: Path
 ) -> None:
-    """A recommendation already satisfied globally needs no project copy."""
+    """A recommendation already satisfied globally needs no project copy.
+
+    Fixed in Phase 3 by `install.prefer_global`, which defaults to true: if you
+    already have the skill, the recommendation is met. It applies only where
+    every declared agent is known to merge its personal and project skill
+    directories — see `skillpod.installer.layering`.
+    """
     global_audit = global_skill_dir("audit", isolated_home)
     global_audit.mkdir(parents=True)
     global_audit.joinpath("SKILL.md").write_text(

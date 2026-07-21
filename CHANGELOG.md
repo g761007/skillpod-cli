@@ -21,6 +21,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`install.prefer_global`** (default `true`) — a skill you already have in
+  `~/.skillpod/skills/` **satisfies the recommendation**: it is not downloaded,
+  not materialised, and not fanned out into the project. `skillpod list` gains
+  a `LAYER` column showing where each skill actually comes from, and `doctor`
+  reports it as `satisfied-by-global` rather than as missing.
+
+  It applies only where **every** declared agent is known to read its personal
+  and project skill directories together. Only Claude Code has been verified
+  (both layers observed live, and confirmed at
+  https://code.claude.com/docs/en/skills); the other five agents are treated as
+  not merging, which costs a redundant copy instead of risking a skill that is
+  silently unavailable.
+
+  Setting `prefer_global: false` forces a project copy — but Claude Code
+  documents that **personal overrides project** on a name collision, so
+  `install` now warns that the project copy will not be the one in use.
 - **`skillpod global update [skill...]`** — refresh globally installed skills
   to newer upstream content, with `--dry-run` to preview and an optional list
   of names to narrow the run. `global upgrade` is a hidden alias.

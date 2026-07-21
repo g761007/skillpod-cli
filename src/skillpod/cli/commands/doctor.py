@@ -26,6 +26,7 @@ from skillpod.cli._output import emit, fail
 from skillpod.installer.expand import flatten
 from skillpod.installer.paths import (
     agent_skill_dir,
+    global_skill_dir,
     install_root,
     is_managed_fanout,
     project_record_path,
@@ -149,16 +150,43 @@ def run(
 
     manifest_skill_names: set[str] = set()
 
-    # Check 1: every recommended skill is actually installed.
+    # Check 1: every recommended skill is accounted for.
     #
     # Not being installed is a *warning*, not an error: skillfile.yml
     # recommends, it does not compel. A freshly cloned project legitimately
-    # has none of them yet, and `skillpod install` is the whole fix.
+    # has none of them yet, and `skillpod install` is the whole fix. A skill
+    # the user already has globally is not missing at all.
     for skill in skills:
         manifest_skill_names.add(skill.name)
         if skill.name in user_skills:
             continue  # lives in .skillpod/user_skills, nothing to install
-        if not (skills_root / skill.name).exists():
+        materialised = (skills_root / skill.name).exists()
+        globally = global_skill_dir(skill.name).is_dir()
+
+        if materialised and globally:
+            findings.append(
+                Finding(
+                    severity="info",
+                    code="also-installed-globally",
+                    message=(
+                        f"'{skill.name}' exists both here and in "
+                        f"~/.skillpod/skills/ — the project copy is redundant "
+                        f"unless `install.prefer_global` is off"
+                    ),
+                )
+            )
+        elif not materialised and globally:
+            findings.append(
+                Finding(
+                    severity="info",
+                    code="satisfied-by-global",
+                    message=(
+                        f"'{skill.name}' is provided by your global install; "
+                        f"no project copy was needed"
+                    ),
+                )
+            )
+        elif not materialised:
             findings.append(
                 Finding(
                     severity="warning",

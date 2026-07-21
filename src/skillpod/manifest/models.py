@@ -129,10 +129,22 @@ class InstallPolicy(_StrictModel):
     ``fallback`` lists modes to try when the primary mode fails (e.g. symlink
     denied by OS).  The default ``["copy"]`` ensures graceful degradation on
     hosts that cannot create symlinks.
+
+    ``prefer_global`` treats a skill the user already has in
+    ``~/.skillpod/skills/`` as **already satisfying** the recommendation: it is
+    not downloaded, not materialised, and not fanned out. Default ``True``,
+    because `skillfile.yml` recommends rather than compels — if you already
+    have the skill, the recommendation is met.
+
+    Set it to ``False`` to force a project-local copy. Note that for agents
+    where the personal skill directory outranks the project one (Claude Code
+    documents exactly that), a global skill of the same name will still be the
+    one in effect; `skillpod install` warns when that applies.
     """
 
     mode: Literal["symlink", "copy", "hardlink"] = "symlink"
     on_missing: Literal["error", "skip"] = "error"
+    prefer_global: bool = True
     fallback: list[Literal["symlink", "copy", "hardlink"]] = Field(
         default_factory=lambda: cast(
             "list[Literal['symlink', 'copy', 'hardlink']]", ["copy"]
