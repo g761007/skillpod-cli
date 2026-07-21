@@ -32,7 +32,7 @@ class DiscoveredSkill:
 
     name: str
     description: str
-    rel_path: str  # path relative to the discovery root (`.` for root-level)
+    rel_path: str  # POSIX path relative to the discovery root (`.` for root-level)
 
 
 def _read_frontmatter_description(skill_md: Path) -> str:
@@ -104,7 +104,10 @@ def discover_skills(
             DiscoveredSkill(
                 name=skill_dir.name,
                 description=_read_frontmatter_description(skill_md),
-                rel_path=str(rel),
+                # Always POSIX, never the OS separator: this value is written
+                # into `sources[].subpath` in a committed skillfile.yml, so a
+                # manifest produced on Windows has to stay readable on Linux.
+                rel_path=rel.as_posix(),
             )
         )
 

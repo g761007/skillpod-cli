@@ -519,7 +519,7 @@ def test_source_mode_auto_detects_master_default_branch(
         app,
         [
             "add",
-            f"file://{repo_path}",
+            repo_path.as_uri(),
             "-y",
             "--manifest",
             str(proj / "skillfile.yml"),
@@ -548,7 +548,7 @@ def test_source_mode_explicit_ref_is_respected(
         app,
         [
             "add",
-            f"file://{repo_path}",
+            repo_path.as_uri(),
             "--ref",
             "develop",
             "-y",
@@ -578,7 +578,7 @@ def test_source_mode_root_is_skill_installs_under_derived_name(
         app,
         [
             "add",
-            f"file://{repo_path}",
+            repo_path.as_uri(),
             "-y",
             "--manifest",
             str(proj / "skillfile.yml"),
@@ -594,7 +594,7 @@ def test_source_mode_root_is_skill_installs_under_derived_name(
     manifest_text = (proj / "skillfile.yml").read_text(encoding="utf-8")
     assert "name: vibe" in manifest_text
     assert "type: git" in manifest_text
-    assert f"file://{repo_path}" in manifest_text
+    assert repo_path.as_uri() in manifest_text
 
 
 def test_source_mode_root_is_skill_global_uses_derived_name(
@@ -616,7 +616,7 @@ def test_source_mode_root_is_skill_global_uses_derived_name(
         app,
         [
             "add",
-            f"file://{repo_path}",
+            repo_path.as_uri(),
             "-g",
             "-y",
         ],
@@ -644,7 +644,7 @@ def test_source_mode_root_is_skill_reinstall_via_install_succeeds(
         app,
         [
             "add",
-            f"file://{repo_path}",
+            repo_path.as_uri(),
             "-y",
             "--manifest",
             str(proj / "skillfile.yml"),
@@ -802,3 +802,108 @@ def test_non_github_host_uses_correct_cache_path(
 
     # Skill must be installed with the correct structure.
     assert (proj / ".skillpod" / "skills" / "audit" / "SKILL.md").is_file()
+
+
+def test_add_installs_a_skill_nested_inside_the_repo(
+    runner: CliRunner, tmp_path: Path
+) -> None:
+    """`skillpod add owner/repo --skill <name>` must work when the skill lives
+    in a subdirectory rather than at the repo root.
+
+    Discovery walks the whole tree, so `--list` shows such a skill and the user
+    reasonably expects `--skill` to install it. Recording only the repo URL
+    loses where the skill actually is, and resolution then looks for
+    `<repo>/<name>` and fails — which broke the flagship example
+    `skillpod add anthropics/skills --skill pdf`, since those skills live under
+    `skills/`.
+    """
+    from tests._git_fixtures import make_multi_skill_repo
+
+    repo_path, _sha = make_multi_skill_repo(
+        tmp_path / "git-side", skills=["pdf", "docx"], subdir="skills"
+    )
+    proj = _make_project(tmp_path)
+
+    result = runner.invoke(
+        app,
+        ["add", str(repo_path), "--skill", "pdf", "-y", "--manifest", str(proj / "skillfile.yml")],
+    )
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert (proj / ".skillpod" / "skills" / "pdf").is_dir()
+    assert (proj / ".claude" / "skills" / "pdf").exists()
+    # The unselected sibling is not dragged in.
+    assert not (proj / ".skillpod" / "skills" / "docx").exists()
+
+
+def test_add_records_the_subpath_for_a_nested_git_skill(
+    runner: CliRunner, tmp_path: Path
+) -> None:
+    """The git form is what the real report was: `anthropics/skills` keeps its
+    skills under `skills/`, so the source entry must carry that subpath."""
+    from tests._git_fixtures import make_multi_skill_repo
+
+    repo_path, _sha = make_multi_skill_repo(
+        tmp_path / "git-side", skills=["pdf"], subdir="skills"
+    )
+    proj = _make_project(tmp_path)
+
+    result = runner.invoke(
+        app,
+        [
+            "add",
+            repo_path.as_uri(),
+            "--skill",
+            "pdf",
+            "-y",
+            "--manifest",
+            str(proj / "skillfile.yml"),
+        ],
+    )
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    manifest = yaml.safe_load((proj / "skillfile.yml").read_text(encoding="utf-8"))
+    [source] = manifest["sources"]
+    assert source["type"] == "git"
+    assert source["subpath"] == "skills"
+    assert (proj / ".skillpod" / "skills" / "pdf").is_dir()
+
+
+def test_skills_from_different_directories_get_their_own_sources(
+    runner: CliRunner, tmp_path: Path
+) -> None:
+    """Two skills nested at different depths cannot share one subpath."""
+    from tests._git_fixtures import _git
+
+    repo = tmp_path / "git-side" / "mixed"
+    (repo / "docs" / "writer").mkdir(parents=True)
+    (repo / "code" / "linter").mkdir(parents=True)
+    for rel in ("docs/writer", "code/linter"):
+        (repo / rel / "SKILL.md").write_text(
+            f"---\ndescription: {rel}\n---\n", encoding="utf-8"
+        )
+    _git(repo, "init", "-q", "-b", "main")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-q", "-m", "two nested skills")
+    proj = _make_project(tmp_path)
+
+    result = runner.invoke(
+        app,
+        [
+            "add",
+            repo.as_uri(),
+            "--skill",
+            "writer",
+            "--skill",
+            "linter",
+            "-y",
+            "--manifest",
+            str(proj / "skillfile.yml"),
+        ],
+    )
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    manifest = yaml.safe_load((proj / "skillfile.yml").read_text(encoding="utf-8"))
+    assert {s["subpath"] for s in manifest["sources"]} == {"docs", "code"}
+    assert (proj / ".skillpod" / "skills" / "writer").is_dir()
+    assert (proj / ".skillpod" / "skills" / "linter").is_dir()

@@ -85,6 +85,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `skillfile.yml` schema. Generated `schemas/global-profile.schema.json` is
   committed for editor integration.
 
+### Fixed
+
+- **`skillpod add <source> --skill <name>` now works for skills nested inside a
+  repository.** Discovery walks the whole tree, so `--list` offered a skill like
+  `pdf` that `--skill pdf` then failed to install: only the repo URL was
+  recorded, so resolution looked for `<repo>/pdf` and gave up. The skill's
+  location is now written into the source's `subpath` (or folded into `path`
+  for local sources, which have no `subpath` field). Skills from different
+  directories get one source each.
+
+  This broke the most obvious first command in the docs —
+  `skillpod add anthropics/skills --skill pdf`, whose skills live under
+  `skills/`.
+
 ### Changed
 
 - **`install` no longer chases upstream, and no longer replays a pin.**
