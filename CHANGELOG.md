@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Migrating from 0.6.x
+
+Nothing to do by hand. The first `skillpod install` after upgrading reads any
+existing `skillfile.lock` once, seeds `.skillpod/installed.yml` from it, and
+carries on — nothing is re-downloaded. The lockfile is **never deleted**; it is
+committed and yours to remove with `git rm skillfile.lock`.
+
+Three defaults changed, all in the direction of *the project recommends, you
+decide*:
+
+- `install` no longer replays a pinned commit. It installs what is missing and
+  leaves the rest alone; `skillpod update` is now the only way to pull newer
+  upstream content. To keep a skill at an exact commit, put it in the manifest:
+  `skills: [{name: pdf, source: skills, version: <sha>}]`.
+- `install.prefer_global` defaults to `true`, so a skill you already have in
+  `~/.skillpod/skills/` is not installed again per project. Set it to `false`
+  for the old behaviour.
+- A project profile now removes fan-out for the skills it excludes. If you had
+  an active profile set and never noticed it doing nothing, expect
+  `.<agent>/skills/` to shrink on the next `install` — the skills stay on disk.
+
 ### Removed
 
 - **`skillfile.lock` is gone.** It existed to force byte-identical skills
@@ -21,6 +42,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`skillpod switch` with no argument lists your profiles** instead of failing
+  with `profile '' not found`, and `skillpod profile use` is deprecated in
+  favour of `switch` — it still works and warns on stderr, so `--json`
+  consumers are unaffected. Two spellings of one action is a cost paid by
+  every reader of the docs.
 - **Project profiles now change what the agent actually sees.** A project-scope
   `skillpod switch` used to write only a pointer: `resolve` and `status`
   honoured the profile while `.<agent>/skills/` never changed, so the agent

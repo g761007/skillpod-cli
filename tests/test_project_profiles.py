@@ -188,3 +188,45 @@ def test_switch_outside_a_project_points_at_the_global_scope(
 
     assert result.exit_code == 1
     assert "--scope global" in result.stdout + (result.stderr or "")
+
+
+# ---- convergence -----------------------------------------------------------
+
+
+def test_switch_with_no_argument_lists_what_you_can_switch_to(
+    runner: CliRunner, tmp_path: Path, isolated_home: Path
+) -> None:
+    """It used to fail with "profile '' not found" — technically true and
+    useless. The question a bare `switch` asks is "to what?"."""
+    proj = _project(tmp_path, _pool(tmp_path, "audit", "polish"), profiles=_MINIMAL)
+
+    result = _invoke(runner, proj, "switch", "--json")
+
+    assert result.exit_code == 0, result.stdout
+    assert json.loads(result.stdout)["profiles"]["project"] == ["minimal"]
+
+
+def test_switch_with_no_profiles_says_how_to_make_one(
+    runner: CliRunner, tmp_path: Path, isolated_home: Path
+) -> None:
+    proj = _project(tmp_path, _pool(tmp_path, "audit", "polish"))
+
+    result = _invoke(runner, proj, "switch")
+
+    assert result.exit_code == 0
+    assert "profile create" in result.stdout or "profiles:" in result.stdout
+
+
+def test_profile_use_still_works_but_warns(
+    runner: CliRunner, tmp_path: Path, isolated_home: Path
+) -> None:
+    """Deprecating is not breaking: existing scripts keep working, and the
+    warning goes to stderr so `--json` consumers are unaffected."""
+    proj = _project(tmp_path, _pool(tmp_path, "audit", "polish"), profiles=_MINIMAL)
+    install(proj)
+
+    result = _invoke(runner, proj, "profile", "use", "minimal")
+
+    assert result.exit_code == 0, result.stdout
+    assert "deprecated" in (result.stderr or "") + result.stdout
+    assert not agent_skill_dir(proj, "claude", "polish").exists()
