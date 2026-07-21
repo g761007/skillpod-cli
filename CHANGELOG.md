@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `install.prefer_global` now also applies to projects targeting **Codex** and
+  **Gemini CLI**, whose skill loaders were verified to read the personal
+  directory from inside a project. Previously only Claude Code qualified, so
+  declaring either agent forced a redundant project copy. `cursor`,
+  `opencode`, and `antigravity` remain unverified and still get a real copy.
+
+### Changed
+
+- The "your project copy is not the one in use" warning is now raised only for
+  agents where that is true. It was derived from the merge flag, but the three
+  verified agents resolve a name collision three different ways: Claude Code
+  prefers the personal copy, Gemini CLI prefers the project copy, and Codex
+  surfaces both. Codex and Gemini users no longer see a warning that inverts
+  their agent's actual behaviour.
+
 ### Fixed
 
 - The Windows test suite is green for the first time since v0.6.5, and the

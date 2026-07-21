@@ -102,9 +102,10 @@ Satisfied by your global install: xlsx
 ```
 
 It applies only where **every** agent you declare is known to read its personal
-*and* project skill directories together. Only Claude Code is verified today;
-the rest get a project copy rather than risk a skill being silently
-unavailable.
+*and* project skill directories together. Verified today: **Claude Code,
+Codex, and Gemini CLI**. Declare any other agent and that project gets a real
+copy instead — an unverified agent is assumed *not* to merge, because a
+silently missing skill is far worse than a redundant copy.
 
 To force a project-local copy anyway:
 
@@ -113,10 +114,14 @@ install:
   prefer_global: false
 ```
 
-Be aware Claude Code
-[documents](https://code.claude.com/docs/en/skills) that a *personal* skill
-outranks a project one of the same name — so with `prefer_global: false`,
-`skillpod install` will warn you that your project copy is not the one in use.
+The three verified agents each resolve a name collision differently, so
+`skillpod install` warns only where the project copy really is ignored:
+
+| Agent | Same skill name in both places |
+|---|---|
+| Claude Code | the **personal** copy wins ([docs](https://code.claude.com/docs/en/skills)) — so `prefer_global: false` warns you the project copy is not the one in use |
+| Gemini CLI | the **project** copy wins |
+| Codex | neither — both appear in the skill selector |
 
 ### …see what I actually have right now
 

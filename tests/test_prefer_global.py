@@ -17,7 +17,12 @@ from typer.testing import CliRunner
 
 from skillpod.cli import app
 from skillpod.installer import install
-from skillpod.installer.layering import Layering, layering_for, merges_layers
+from skillpod.installer.layering import (
+    Layering,
+    layering_for,
+    merges_layers,
+    personal_outranks_project,
+)
 from skillpod.installer.paths import global_skill_dir, project_record_path
 from skillpod.record import io as record_io
 
@@ -73,10 +78,28 @@ def test_only_measured_agents_are_treated_as_merging() -> None:
     Getting this wrong drops a skill the project recommends, with no error to
     explain why — much worse than the redundant copy that caution costs.
     """
-    assert layering_for("claude") is Layering.MERGES
-    for unmeasured in ("codex", "gemini", "cursor", "opencode", "antigravity"):
+    for measured in ("claude", "codex", "gemini"):
+        assert layering_for(measured) is Layering.MERGES
+
+    for unmeasured in ("cursor", "opencode", "antigravity", "not-a-real-agent"):
         assert layering_for(unmeasured) is Layering.UNKNOWN
         assert not merges_layers(unmeasured)
+
+
+def test_collision_rule_is_not_read_off_the_merge_flag() -> None:
+    """Merging and "whose copy wins" are separate facts, measured separately.
+
+    All three merging agents resolve a name collision differently: Claude Code
+    lets the personal copy win, Gemini lets the project copy win, and Codex
+    surfaces both. Deriving one from the other told Codex and Gemini users that
+    their project copy would be ignored, which is the opposite of the truth.
+    """
+    assert personal_outranks_project("claude")
+    assert not personal_outranks_project("codex")
+    assert not personal_outranks_project("gemini")
+    # No collision exists for an agent whose project dir replaces the personal
+    # one, so the answer there is False rather than unknown.
+    assert not personal_outranks_project("cursor")
 
 
 # ---- the default: satisfied by global --------------------------------------
@@ -160,11 +183,17 @@ def test_prefer_global_false_warns_that_the_copy_is_outranked(
 def test_an_unmeasured_agent_blocks_the_optimisation(
     tmp_path: Path, isolated_home: Path
 ) -> None:
-    """`codex` layering is unverified, so the project copy must still be made —
-    otherwise codex would simply never see the skill."""
+    """`cursor` layering is unverified, so the project copy must still be made —
+    otherwise cursor would simply never see the skill.
+
+    One unmeasured agent is enough to block it even though `claude` merges: the
+    optimisation is only safe when *every* declared agent reads the personal
+    directory. (This test named `codex` until codex was measured; any agent
+    still absent from the layering table serves the same purpose.)
+    """
     _global_skill(isolated_home, "audit")
     pool = _pool(tmp_path, "audit")
-    proj = _project(tmp_path, _manifest(pool, agents="claude, codex", skills="audit"))
+    proj = _project(tmp_path, _manifest(pool, agents="claude, cursor", skills="audit"))
 
     report = install(proj)
 
