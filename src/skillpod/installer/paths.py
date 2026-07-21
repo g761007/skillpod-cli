@@ -8,6 +8,7 @@ from pathlib import Path
 PROJECT_INSTALL_ROOT = ".skillpod/skills"
 GLOBAL_INSTALL_ROOT_REL = ".skillpod/skills"
 GLOBAL_PROFILES_REL = ".skillpod/profiles"
+INSTALL_RECORD_REL = ".skillpod/installed.yml"
 
 
 def project_skill_dir(project_root: Path, skill_name: str) -> Path:
@@ -44,6 +45,21 @@ def global_profile_path(name: str, home: Path | None = None) -> Path:
 def global_skill_dir(skill_name: str, home: Path | None = None) -> Path:
     """Return `~/.skillpod/skills/<skill_name>`."""
     return global_install_root(home) / skill_name
+
+
+def project_record_path(project_root: Path) -> Path:
+    """Return `<project_root>/.skillpod/installed.yml`.
+
+    Lives under `.skillpod/`, which `skillpod init` already gitignores — the
+    record describes one machine and must never be committed.
+    """
+    return project_root / INSTALL_RECORD_REL
+
+
+def global_record_path(home: Path | None = None) -> Path:
+    """Return `~/.skillpod/installed.yml`."""
+    base = (home or Path.home()).expanduser()
+    return base / INSTALL_RECORD_REL
 
 
 def global_agent_skill_dir(agent: str, skill_name: str, home: Path | None = None) -> Path:
@@ -116,15 +132,18 @@ def is_managed_fanout(link_path: Path, project_root: Path) -> bool:
 __all__ = [
     "GLOBAL_INSTALL_ROOT_REL",
     "GLOBAL_PROFILES_REL",
+    "INSTALL_RECORD_REL",
     "PROJECT_INSTALL_ROOT",
     "agent_skill_dir",
     "global_agent_skill_dir",
     "global_install_root",
     "global_profile_path",
     "global_profiles_root",
+    "global_record_path",
     "global_skill_dir",
     "install_root",
     "is_managed_fanout",
     "is_managed_global_fanout",
+    "project_record_path",
     "project_skill_dir",
 ]
