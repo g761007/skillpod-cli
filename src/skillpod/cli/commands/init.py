@@ -24,6 +24,8 @@ agents:
 #   mode: symlink            # symlink | copy | hardlink   (default: symlink)
 #   on_missing: error        # error | skip                (default: error)
 #   fallback: [copy]         # tried when `mode` fails     (default: [copy])
+#   prefer_global: true      # a skill already in ~/.skillpod/skills/ counts as
+#                            # satisfied; false forces a project-local copy
 
 # registry:
 #   default: skills.sh
