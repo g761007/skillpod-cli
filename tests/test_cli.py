@@ -18,6 +18,7 @@ import yaml
 from typer.testing import CliRunner
 
 from skillpod.cli import app
+from tests._env import set_home
 from tests._git_fixtures import make_skill_repo
 
 _REGISTRY_BASE = "https://registry.test"
@@ -866,7 +867,7 @@ def test_doctor_schema_hints_flag_json_mode(
 def test_global_list_against_fake_home(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     (tmp_path / ".claude" / "skills" / "audit").mkdir(parents=True)
     (tmp_path / ".codex" / "skills" / "polish").mkdir(parents=True)
 
@@ -891,7 +892,7 @@ def _archive_project(tmp_path: Path) -> Path:
 def test_global_archive_moves_to_skillpod_home(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     skill_dir = tmp_path / ".claude" / "skills" / "audit"
     skill_dir.mkdir(parents=True)
     (skill_dir / "manifest.md").write_text("# audit", encoding="utf-8")
@@ -915,7 +916,7 @@ def test_global_archive_moves_to_skillpod_home(
 def test_global_archive_idempotent_when_dest_matches(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     dest = tmp_path / ".skillpod" / "skills" / "audit"
     dest.mkdir(parents=True)
     (dest / "manifest.md").write_text("# audit", encoding="utf-8")
@@ -938,7 +939,7 @@ def test_global_archive_idempotent_when_dest_matches(
 def test_global_archive_conflict_without_force(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     dest = tmp_path / ".skillpod" / "skills" / "audit"
     dest.mkdir(parents=True)
     (dest / "manifest.md").write_text("# old", encoding="utf-8")
@@ -958,7 +959,7 @@ def test_global_archive_conflict_without_force(
 def test_global_archive_force_overwrites(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     dest = tmp_path / ".skillpod" / "skills" / "audit"
     dest.mkdir(parents=True)
     (dest / "manifest.md").write_text("# old", encoding="utf-8")
@@ -977,7 +978,7 @@ def test_global_archive_force_overwrites(
 def test_global_archive_unlinks_managed_symlink(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     dest = tmp_path / ".skillpod" / "skills" / "audit"
     dest.mkdir(parents=True)
     (dest / "manifest.md").write_text("# audit", encoding="utf-8")
@@ -1001,7 +1002,7 @@ def test_global_archive_unlinks_managed_symlink(
 def test_global_archive_multi_agent_same_content(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     claude_copy = tmp_path / ".claude" / "skills" / "audit"
     claude_copy.mkdir(parents=True)
     (claude_copy / "manifest.md").write_text("# audit", encoding="utf-8")
@@ -1025,7 +1026,7 @@ def test_global_archive_multi_agent_same_content(
 def test_global_archive_all_archives_unmanaged(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     alpha = tmp_path / ".claude" / "skills" / "alpha"
     alpha.mkdir(parents=True)
     (alpha / "manifest.md").write_text("# alpha", encoding="utf-8")
@@ -1046,7 +1047,7 @@ def test_global_archive_all_archives_unmanaged(
 def test_global_archive_all_skips_skillpod_managed(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     alpha = tmp_path / ".claude" / "skills" / "alpha"
     alpha.mkdir(parents=True)
     (alpha / "manifest.md").write_text("# alpha", encoding="utf-8")
@@ -1080,7 +1081,7 @@ def test_global_archive_no_args_shows_help(
 def test_global_archive_multi_skill_archives_named(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     for name in ("alpha", "beta", "gamma"):
         d = tmp_path / ".claude" / "skills" / name
         d.mkdir(parents=True)
@@ -1100,7 +1101,7 @@ def test_global_archive_multi_skill_archives_named(
 def test_global_archive_multi_skill_skips_managed(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     alpha = tmp_path / ".claude" / "skills" / "alpha"
     alpha.mkdir(parents=True)
     (alpha / "manifest.md").write_text("# alpha", encoding="utf-8")
@@ -1123,7 +1124,7 @@ def test_global_archive_multi_skill_skips_managed(
 def test_global_doctor_flags_duplicate(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     (tmp_path / ".claude" / "skills" / "audit").mkdir(parents=True)
     (tmp_path / ".codex" / "skills" / "audit").mkdir(parents=True)
     proj = tmp_path / "project"
@@ -1150,7 +1151,7 @@ def test_global_doctor_reports_global_local_overlap_without_failing(
     keeps the skill globally has not done anything wrong. This used to be a
     hard error with exit 1.
     """
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     (tmp_path / ".claude" / "skills" / "audit").mkdir(parents=True)
     proj = tmp_path / "project"
     proj.mkdir()
@@ -1181,7 +1182,7 @@ def test_global_doctor_reports_global_local_overlap_without_failing(
 def test_global_doctor_flags_broken_symlink(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     skill_link = tmp_path / ".claude" / "skills" / "ghost"
     skill_link.parent.mkdir(parents=True)
     skill_link.symlink_to(tmp_path / "missing-target")
@@ -1204,7 +1205,7 @@ def test_global_doctor_flags_broken_symlink(
 def test_global_list_defaults_to_install_root(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     (tmp_path / ".skillpod" / "skills" / "foo").mkdir(parents=True)
     (tmp_path / ".claude" / "skills" / "bar").mkdir(parents=True)
 
@@ -1221,7 +1222,7 @@ def test_global_list_defaults_to_install_root(
 def test_global_list_shows_linked_agents(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     install_root = tmp_path / ".skillpod" / "skills" / "foo"
     install_root.mkdir(parents=True)
     claude_link = tmp_path / ".claude" / "skills" / "foo"
@@ -1240,7 +1241,7 @@ def test_global_list_shows_linked_agents(
 def test_global_list_agents_view_is_per_agent(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     (tmp_path / ".claude" / "skills" / "alpha").mkdir(parents=True)
     (tmp_path / ".gemini" / "skills" / "beta").mkdir(parents=True)
 
@@ -1260,7 +1261,7 @@ def test_global_list_agents_view_is_per_agent(
 def test_global_link_creates_symlinks(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     install_root = tmp_path / ".skillpod" / "skills" / "foo"
     install_root.mkdir(parents=True)
     (install_root / "SKILL.md").write_text("# foo", encoding="utf-8")
@@ -1281,7 +1282,7 @@ def test_global_link_creates_symlinks(
 def test_global_link_defaults_to_all_agents(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     install_root = tmp_path / ".skillpod" / "skills" / "foo"
     install_root.mkdir(parents=True)
 
@@ -1298,7 +1299,7 @@ def test_global_link_defaults_to_all_agents(
 def test_global_link_fails_when_install_root_missing(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
 
     result = runner.invoke(app, ["global", "link", "no-such-skill", "--agent", "codex"])
 
@@ -1309,7 +1310,7 @@ def test_global_link_fails_when_install_root_missing(
 def test_global_link_already_linked_is_idempotent(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     install_root = tmp_path / ".skillpod" / "skills" / "foo"
     install_root.mkdir(parents=True)
     claude_link = tmp_path / ".claude" / "skills" / "foo"
@@ -1328,7 +1329,7 @@ def test_global_link_already_linked_is_idempotent(
 def test_global_link_skips_unmanaged_without_yes(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     install_root = tmp_path / ".skillpod" / "skills" / "foo"
     install_root.mkdir(parents=True)
     gemini_conflict = tmp_path / ".gemini" / "skills" / "foo"
@@ -1353,7 +1354,7 @@ def test_global_link_skips_unmanaged_without_yes(
 def test_global_unlink_removes_managed_symlinks(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     install_root = tmp_path / ".skillpod" / "skills" / "foo"
     install_root.mkdir(parents=True)
     for agent in ("claude", "codex"):
@@ -1374,7 +1375,7 @@ def test_global_unlink_removes_managed_symlinks(
 def test_global_unlink_specific_agent(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     install_root = tmp_path / ".skillpod" / "skills" / "foo"
     install_root.mkdir(parents=True)
     for agent in ("claude", "codex"):
@@ -1394,7 +1395,7 @@ def test_global_unlink_specific_agent(
 def test_global_unlink_skips_unmanaged(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     install_root = tmp_path / ".skillpod" / "skills" / "foo"
     install_root.mkdir(parents=True)
     unmanaged = tmp_path / ".gemini" / "skills" / "foo"
@@ -1588,7 +1589,7 @@ def test_profile_create_with_type(runner: CliRunner, tmp_path: Path) -> None:
 def test_profile_create_global(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
 
     result = runner.invoke(app, ["profile", "create", "g-reviewer", "--global", "--json"])
 
@@ -1616,7 +1617,7 @@ def test_profile_create_duplicate_project_exits_1(
 def test_profile_list_shows_project_and_global(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     proj = _project(
         tmp_path,
         "version: 1\nprofiles:\n  local-p: {}\n",
@@ -1647,7 +1648,7 @@ def test_profile_list_shows_project_and_global(
 def test_profile_list_empty(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     proj = _project(tmp_path, "version: 1\n")
 
     result = runner.invoke(
@@ -1683,7 +1684,7 @@ def test_profile_show_project_profile(runner: CliRunner, tmp_path: Path) -> None
 def test_profile_show_not_found_exits_1(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     proj = _project(tmp_path, "version: 1\n")
 
     result = runner.invoke(
@@ -1766,7 +1767,7 @@ def test_profile_remove_not_in_profile_exits_1(runner: CliRunner, tmp_path: Path
 def test_status_shows_project_info(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     proj = _project(tmp_path, "version: 1\nskills:\n  - audit\n")
 
     result = runner.invoke(
@@ -1783,7 +1784,7 @@ def test_status_shows_project_info(
 def test_status_with_profile_shows_effective_skills(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     proj = _project(
         tmp_path,
         "version: 1\nskills:\n  - audit\n  - review\n"
@@ -1868,7 +1869,7 @@ def test_resolve_explain_json_has_provenance(runner: CliRunner, tmp_path: Path) 
 def test_resolve_unknown_profile_exits_1(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     proj = _project(tmp_path, "version: 1\nskills:\n  - audit\n")
 
     result = runner.invoke(
@@ -1890,7 +1891,7 @@ def test_resolve_unknown_profile_exits_1(
 def test_status_shows_activation_line(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     proj = _project(
         tmp_path,
         "version: 1\nskills:\n  - audit\n"
@@ -1908,7 +1909,7 @@ def test_status_shows_activation_line(
 def test_status_json_has_activation_key(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     proj = _project(
         tmp_path,
         "version: 1\nskills:\n  - audit\n"
@@ -1931,7 +1932,7 @@ def test_resolve_ignore_global_skips_global_profile(
     from skillpod.manifest.models import ProfileEntry
     from skillpod.profile.io import write_global_profile
 
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     write_global_profile("reviewer", ProfileEntry(skills=["audit"]), home=tmp_path)
     proj = _project(tmp_path, "version: 1\nskills:\n  - audit\n")
 
@@ -1955,7 +1956,7 @@ def test_activation_strict_rejects_global_via_cli(
     from skillpod.manifest.models import ProfileEntry
     from skillpod.profile.io import write_global_profile
 
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     write_global_profile("reviewer", ProfileEntry(skills=["audit"]), home=tmp_path)
     proj = _project(
         tmp_path,
@@ -1982,7 +1983,7 @@ def test_activation_fallback_uses_global_via_cli(
     from skillpod.manifest.models import ProfileEntry
     from skillpod.profile.io import write_global_profile
 
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     write_global_profile("g-rev", ProfileEntry(skills=["audit"]), home=tmp_path)
     proj = _project(
         tmp_path,
@@ -2011,7 +2012,7 @@ def test_activation_merge_unions_skills_via_cli(
     from skillpod.manifest.models import ProfileEntry
     from skillpod.profile.io import write_global_profile
 
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     write_global_profile("dev", ProfileEntry(skills=["review"]), home=tmp_path)
     proj = _project(
         tmp_path,
@@ -2041,7 +2042,7 @@ def test_activation_merge_unions_skills_via_cli(
 def test_profile_current_no_active_profile(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     proj = _project(tmp_path, "version: 1\nskills:\n  - audit\n")
 
     result = runner.invoke(
@@ -2056,7 +2057,7 @@ def test_profile_current_no_active_profile(
 def test_profile_current_no_active_profile_json(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     proj = _project(tmp_path, "version: 1\nskills:\n  - audit\n")
 
     result = runner.invoke(
@@ -2073,7 +2074,7 @@ def test_profile_current_no_active_profile_json(
 def test_switch_project_scope_then_profile_current(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     proj = _project(
         tmp_path,
         "version: 1\nskills:\n  - audit\n  - review\n"
@@ -2113,7 +2114,7 @@ def test_switch_session_scope_prints_export(
 def test_switch_global_inside_project_without_confirm_fails(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     proj = _project(tmp_path, "version: 1\nskills:\n  - audit\n")
 
     result = runner.invoke(
@@ -2127,7 +2128,7 @@ def test_switch_global_inside_project_without_confirm_fails(
 def test_switch_global_inside_project_with_confirm_succeeds(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     proj = _project(tmp_path, "version: 1\nskills:\n  - audit\n")
     # `switch --scope global` now reconciles, so the profile must exist.
     profiles = tmp_path / ".skillpod" / "profiles"
@@ -2150,7 +2151,7 @@ def test_switch_global_inside_project_with_confirm_succeeds(
 def test_resolve_picks_up_state_active_profile(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     proj = _project(
         tmp_path,
         "version: 1\nskills:\n  - audit\n  - review\n"
@@ -2175,7 +2176,7 @@ def test_resolve_picks_up_state_active_profile(
 def test_status_shows_active_profile_from_state(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     # `dev` has to exist: switching now reconciles fan-out, so an unknown
     # profile is rejected rather than silently written as a pointer that every
     # later `resolve` would choke on.
@@ -2202,7 +2203,7 @@ def test_status_shows_active_profile_from_state(
 def test_profile_use_alias_works(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     proj = _project(
         tmp_path,
         "version: 1\nskills:\n  - audit\n"
@@ -2228,7 +2229,7 @@ def test_shell_command_nested_guard(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """shell command exits 1 when already inside a skillpod shell."""
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     monkeypatch.setenv("SKILLPOD_SHELL_DEPTH", "1")
     proj = _project(
         tmp_path,
@@ -2263,7 +2264,7 @@ def _profile_project(tmp_path: Path) -> Path:
 def test_profile_diff_command(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     proj = _profile_project(tmp_path)
 
     result = runner.invoke(
@@ -2281,7 +2282,7 @@ def test_profile_diff_command(
 def test_profile_export_command(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     proj = _profile_project(tmp_path)
 
     result = runner.invoke(
@@ -2298,7 +2299,7 @@ def test_profile_export_command(
 def test_profile_import_command(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     proj = _profile_project(tmp_path)
 
     import yaml as _yaml
@@ -2341,7 +2342,7 @@ def test_profile_import_command(
 def test_switch_composition_session_scope_works(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     proj = _profile_project(tmp_path)
 
     result = runner.invoke(
@@ -2363,7 +2364,7 @@ def test_switch_composition_session_scope_works(
 def test_switch_composition_project_scope_raises(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     proj = _profile_project(tmp_path)
 
     result = runner.invoke(

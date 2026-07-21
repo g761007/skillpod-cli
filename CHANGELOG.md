@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The Windows test suite is green for the first time since v0.6.5, and the
+  job now gates CI instead of being marked `experimental` (#10). All 34
+  remaining failures had one cause: `Path.home()` reads `USERPROFILE` on
+  Windows and ignores `HOME`, so tests redirecting the home directory with
+  `HOME` alone left the code under test reading a different directory than the
+  test populated. Test-only change — no library behaviour is affected.
+
 ## [0.9.0] - 2026-07-21
 
 The **recommendation model**: `skillfile.yml` declares what a project

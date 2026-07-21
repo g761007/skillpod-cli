@@ -11,6 +11,7 @@ import pytest
 from click.exceptions import Exit as ClickExit
 
 from skillpod.cli.commands import shell as shell_mod
+from tests._env import set_home
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -49,7 +50,7 @@ def test_shell_builds_correct_env(
         captured["env"] = dict(kwargs.get("env", {}))
         return MagicMock(returncode=0)
 
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     monkeypatch.delenv("SKILLPOD_SHELL_DEPTH", raising=False)
     monkeypatch.setattr(subprocess, "run", fake_run)
 
@@ -75,7 +76,7 @@ def test_shell_rejects_nested_invocation(
     manifest_path = _make_manifest(tmp_path, _MANIFEST_DEV)
 
     monkeypatch.setenv("SKILLPOD_SHELL_DEPTH", "1")
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
 
     with pytest.raises(ClickExit) as exc_info:
         shell_mod.run(
@@ -98,7 +99,7 @@ def test_shell_unknown_profile_raises(
     manifest_path = _make_manifest(tmp_path, _MANIFEST_DEV)
 
     monkeypatch.delenv("SKILLPOD_SHELL_DEPTH", raising=False)
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
 
     with pytest.raises(ClickExit) as exc_info:
         shell_mod.run(
@@ -129,7 +130,7 @@ def test_shell_spawns_correct_executable(
 
     monkeypatch.setenv("SHELL", "/bin/bash")
     monkeypatch.delenv("SKILLPOD_SHELL_DEPTH", raising=False)
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     monkeypatch.setattr(subprocess, "run", fake_run)
 
     shell_mod.run(
@@ -160,7 +161,7 @@ def test_shell_sets_ps1_prefix(
 
     monkeypatch.setenv("PS1", "\\u@\\h $ ")
     monkeypatch.delenv("SKILLPOD_SHELL_DEPTH", raising=False)
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, tmp_path)
     monkeypatch.setattr(subprocess, "run", fake_run)
 
     shell_mod.run(

@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 
+from tests._env import set_home
+
 
 @pytest.fixture(autouse=True)
 def isolated_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
@@ -28,6 +30,5 @@ def isolated_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     """
     home = tmp_path / "_home"
     home.mkdir(exist_ok=True)
-    monkeypatch.setenv("HOME", str(home))
-    monkeypatch.setenv("USERPROFILE", str(home))
+    set_home(monkeypatch, home)
     return home
