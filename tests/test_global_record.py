@@ -51,12 +51,13 @@ def test_git_install_records_source_ref_and_commit(tmp_path: Path) -> None:
     """This is the prerequisite for `global update` to exist at all."""
     repo, sha = make_root_skill_repo(tmp_path / "src", repo_name="audit")
     home = tmp_path / "home"
+    url = repo.as_uri()  # file:///C:/... on Windows, file:///... elsewhere
 
-    _install(f"file://{repo}", home)
+    _install(url, home)
 
     rec = read_global_record(home).installed["audit"]
     assert rec.kind == "git"
-    assert rec.source == f"file://{repo}"
+    assert rec.source == url
     assert rec.commit == sha
     assert rec.ref is not None
     assert rec.sha256 is not None
@@ -88,9 +89,14 @@ def test_second_install_merges_rather_than_replaces(tmp_path: Path) -> None:
 
 def test_uninstall_forgets_the_skill(tmp_path: Path) -> None:
     """A record claiming a skill that is gone is worse than no record."""
-    repo, _sha = make_root_skill_repo(tmp_path / "src", repo_name="audit")
+    # A plain directory rather than a git repo: uninstall rmtree's the
+    # materialised copy, and git's read-only object files make that fail on
+    # Windows (see issue #10). Nothing here needs version control.
+    pool = tmp_path / "pool" / "audit"
+    pool.mkdir(parents=True)
+    (pool / "SKILL.md").write_text("---\ndescription: audit\n---\n", encoding="utf-8")
     home = tmp_path / "home"
-    _install(str(repo), home)
+    _install(str(pool), home)
 
     uninstall_global("audit", agents=["claude"], home=home)
 
@@ -106,14 +112,15 @@ def test_recover_source_prefers_the_record(tmp_path: Path) -> None:
     real directory, and the old recovery could only read symlinks."""
     repo, sha = make_root_skill_repo(tmp_path / "src", repo_name="audit")
     home = tmp_path / "home"
-    _install(f"file://{repo}", home)
+    url = repo.as_uri()
+    _install(url, home)
 
     # Materialised as a real directory, so symlink archaeology cannot help.
     assert global_skill_dir("audit", home).is_dir()
     assert not global_skill_dir("audit", home).is_symlink()
 
     recovered = recover_source("audit", home)
-    assert recovered.source == f"file://{repo}"
+    assert recovered.source == url
     # The branch, not the commit it happened to point at on this machine.
     assert recovered.ref == "main"
     assert recovered.ref != sha

@@ -203,7 +203,8 @@ def test_global_install_keeps_source_recoverable(tmp_path: Path, isolated_home: 
     """
     repo, _sha = make_root_skill_repo(tmp_path / "src", repo_name="audit")
     body = GlobalProfileBody.model_validate(
-        {"skills": [{"name": "audit", "source": f"file://{repo}"}]}
+        # as_uri() so the URL is valid on Windows too (file:///C:/...).
+        {"skills": [{"name": "audit", "source": repo.as_uri()}]}
     )
     plan = plan_apply(body, agents=["claude"], home=isolated_home)
     report = execute_apply(body, plan, force=True, home=isolated_home)
