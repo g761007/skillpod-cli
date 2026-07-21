@@ -81,14 +81,6 @@ def _project(tmp_path: Path, manifest: str) -> Path:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Project-scope switch only writes .skillpod/active-profile; neither "
-        "sync nor the install pipeline consults it, so fan-out never changes. "
-        "Fixed in Phase 6 (installer/project_apply.py)."
-    ),
-)
 def test_project_profile_switch_unlinks_excluded_skills(
     runner: CliRunner, tmp_path: Path
 ) -> None:
@@ -96,6 +88,10 @@ def test_project_profile_switch_unlinks_excluded_skills(
 
     A profile the agent cannot observe is decorative: the whole point of
     `switch minimal` is that the agent stops loading `polish`.
+
+    Fixed in Phase 6. `switch` reconciles fan-out through
+    `installer/project_apply.py`, and `sync` honours the active profile rather
+    than rebuilding every link and silently undoing the switch.
     """
     pool = _skill_pool(tmp_path, "audit", "polish")
     manifest_path = _project(

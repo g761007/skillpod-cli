@@ -20,6 +20,8 @@ from skillpod.installer.global_apply import (
     plan_apply,
 )
 from skillpod.installer.global_install import DEFAULT_GLOBAL_AGENTS
+from skillpod.installer.project_apply import execute_project_fanout, plan_project_fanout
+from skillpod.manifest import load as load_manifest
 from skillpod.profile.compose import compose_global_bodies
 from skillpod.profile.errors import ProfileError
 from skillpod.profile.fetch import resolve_profile_target
@@ -197,13 +199,48 @@ def run(
             )
             return
 
-        # --- Project: lightweight pointer ---------------------------------
-        write_active_profile(name, scope, project_root, home=home)
-        emit(
-            {"profile": name, "scope": scope},
-            json_output=json_output,
-            human=f"active profile set to '{name}' (scope: {scope})",
+        # --- Project: write the pointer, then make it true ----------------
+        #
+        # Writing only the pointer left `resolve` and `status` honouring the
+        # profile while the agent went on loading everything — the setting
+        # looked like it worked, which is worse than not having it.
+        if not manifest_path.is_file():
+            raise ProfileError(
+                f"{manifest_path} not found — use `--scope global` to switch "
+                f"the global skill set"
+            )
+        manifest = load_manifest(manifest_path)
+
+        plan = plan_project_fanout(
+            project_root, manifest, profile_name=name, home=home
         )
+        if not dry_run:
+            write_active_profile(name, scope, project_root, home=home)
+            execute_project_fanout(project_root, manifest, plan)
+
+        payload = {
+            "profile": name,
+            "scope": scope,
+            "dry_run": dry_run,
+            "linked": plan.to_link,
+            "unlinked": plan.to_unlink,
+        }
+        verb = "would show" if dry_run else "now showing"
+        lines = [
+            ("would set" if dry_run else "active profile set to")
+            + f" '{name}' (scope: {scope})"
+        ]
+        if plan.to_link:
+            lines.append(f"  {verb}: {', '.join(plan.to_link)}")
+        if plan.to_unlink:
+            lines.append(
+                ("  would hide: " if dry_run else "  hidden: ")
+                + ", ".join(plan.to_unlink)
+                + " (still installed — switching back is instant)"
+            )
+        if not plan.has_changes:
+            lines.append("  fan-out already matches this profile")
+        emit(payload, json_output=json_output, human="\n".join(lines))
 
     run_with_exit_codes(_run, json_output=json_output)
 

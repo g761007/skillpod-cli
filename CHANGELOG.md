@@ -21,6 +21,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Project profiles now change what the agent actually sees.** A project-scope
+  `skillpod switch` used to write only a pointer: `resolve` and `status`
+  honoured the profile while `.<agent>/skills/` never changed, so the agent
+  went on loading everything and the setting *looked* like it worked.
+
+  `switch` now reconciles fan-out, and `install` and `sync` respect the active
+  profile rather than rebuilding every link and silently undoing it. Profiles
+  filter **visibility, not presence**: a hidden skill stays in
+  `.skillpod/skills/`, so switching back is offline and immediate. `--dry-run`
+  previews the change.
+
+  Switching to a profile that does not exist is now rejected. Previously the
+  pointer was written unchecked, leaving a project where every later `resolve`
+  failed with nothing pointing at the cause.
 - **`skillpod link` / `skillpod unlink`** — one verb pair for both scopes.
   Project scope by default, `-g` for global; `global link` / `global unlink`
   remain as aliases. Previously the project side could only be expressed as
