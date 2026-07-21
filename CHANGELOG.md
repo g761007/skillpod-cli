@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-07-21
+
 ### Added
 
 - `install.prefer_global` now also applies to projects targeting **Codex** and
@@ -723,9 +725,10 @@ required to publish.
 - pytest suite covering manifest, lockfile, source resolution, installer,
   and CLI smoke tests.
 
+[0.9.1]: https://github.com/g761007/skillpod-cli/compare/v0.9.0...v0.9.1
+[0.9.0]: https://github.com/g761007/skillpod-cli/compare/v0.6.5...v0.9.0
 [0.6.5]: https://github.com/g761007/skillpod-cli/compare/v0.6.4...v0.6.5
 [0.6.4]: https://github.com/g761007/skillpod-cli/compare/v0.6.3...v0.6.4
-[0.9.0]: https://github.com/g761007/skillpod-cli/compare/v0.6.5...v0.9.0
 [0.6.3]: https://github.com/g761007/skillpod-cli/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/g761007/skillpod-cli/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/g761007/skillpod-cli/compare/v0.6.0...v0.6.1

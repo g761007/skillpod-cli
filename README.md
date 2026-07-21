@@ -397,6 +397,7 @@ record. That detects drift and corruption; it does not vet the content.
 | 0.1.0 – 0.5.x | shipped | manifest, installer, registry, adapters, `global` CLI |
 | 0.6.x | shipped | workspace profiles, activation policy, session shell, composition |
 | 0.9.0 | shipped | **recommendation model** — `skillfile.lock` retired, `prefer_global`, `global update`, `status` dashboard, unified `link`/`unlink`, project profiles that reconcile fan-out |
+| 0.9.1 | shipped | `prefer_global` extended to Codex and Gemini CLI; Windows suite green and gating CI |
 | 1.0.0 | planned | schema freeze |
 
 Full history: [`CHANGELOG.md`](./CHANGELOG.md).
