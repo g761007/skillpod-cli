@@ -39,12 +39,19 @@ def runner() -> CliRunner:
 @pytest.fixture(autouse=True)
 def isolated_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     """Point HOME and the git cache at tmp_path so the user's real global
-    skill set is never read or mutated by these tests."""
+    skill set is never read or mutated by these tests.
+
+    ``USERPROFILE`` is set alongside ``HOME`` because ``Path.home()`` resolves
+    via ``ntpath.expanduser`` on Windows, which consults ``USERPROFILE`` and
+    ignores ``HOME`` entirely — setting only ``HOME`` would leave these tests
+    reading and writing the developer's real home directory there.
+    """
     home = tmp_path / "home"
     home.mkdir()
     cache = tmp_path / "cache"
     cache.mkdir()
     monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
     monkeypatch.setenv("SKILLPOD_CACHE_DIR", str(cache))
     monkeypatch.delenv("SKILLPOD_ACTIVE_PROFILE", raising=False)
     return home
