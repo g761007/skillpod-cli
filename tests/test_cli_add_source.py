@@ -11,6 +11,7 @@ import yaml
 from typer.testing import CliRunner
 
 from skillpod.cli import app
+from tests._env import set_home
 
 
 @pytest.fixture
@@ -374,7 +375,7 @@ def test_source_mode_global_installs_without_fanout(
 ) -> None:
     fake_home = tmp_path / "home"
     fake_home.mkdir()
-    monkeypatch.setenv("HOME", str(fake_home))
+    set_home(monkeypatch, fake_home)
 
     pool = _make_local_skill_pool(tmp_path, names=["pdf"])
     result = runner.invoke(
@@ -405,7 +406,7 @@ def test_source_mode_global_default_does_not_fanout(
 ) -> None:
     fake_home = tmp_path / "home"
     fake_home.mkdir()
-    monkeypatch.setenv("HOME", str(fake_home))
+    set_home(monkeypatch, fake_home)
 
     pool = _make_local_skill_pool(tmp_path, names=["pdf"])
     result = runner.invoke(
@@ -425,7 +426,7 @@ def test_source_mode_global_rejects_agent_flag(
 ) -> None:
     fake_home = tmp_path / "home"
     fake_home.mkdir()
-    monkeypatch.setenv("HOME", str(fake_home))
+    set_home(monkeypatch, fake_home)
 
     pool = _make_local_skill_pool(tmp_path, names=["pdf"])
     result = runner.invoke(
@@ -455,7 +456,7 @@ def test_global_install_survives_cache_prune(
 
     fake_home = tmp_path / "home"
     fake_home.mkdir()
-    monkeypatch.setenv("HOME", str(fake_home))
+    set_home(monkeypatch, fake_home)
 
     repo_path, _sha = make_skill_repo(
         tmp_path / "git-side",
@@ -608,7 +609,7 @@ def test_source_mode_root_is_skill_global_uses_derived_name(
 
     fake_home = tmp_path / "home"
     fake_home.mkdir()
-    monkeypatch.setenv("HOME", str(fake_home))
+    set_home(monkeypatch, fake_home)
 
     repo_path, _sha = make_root_skill_repo(tmp_path / "git-side", repo_name="vibe")
 
@@ -671,7 +672,7 @@ def test_global_install_idempotent_when_content_matches(
     succeed without ``--force`` (hash-based idempotency)."""
     fake_home = tmp_path / "home"
     fake_home.mkdir()
-    monkeypatch.setenv("HOME", str(fake_home))
+    set_home(monkeypatch, fake_home)
 
     pool = _make_local_skill_pool(tmp_path, names=["pdf"])
     args = ["add", str(pool), "-s", "pdf", "-g", "-y"]

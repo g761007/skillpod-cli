@@ -23,6 +23,7 @@ from skillpod.record.models import InstallRecord, SkillRecord
 from skillpod.sources.discovery import discover_skills
 from skillpod.sources.git import populate_cache, resolve_ref
 from skillpod.sources.spec import parse_source_spec
+from tests._env import set_home
 from tests._git_fixtures import _git, make_root_skill_repo
 
 _COMMIT = "a" * 40
@@ -40,8 +41,7 @@ def isolated_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setenv("SKILLPOD_CACHE_DIR", str(cache))
-    monkeypatch.setenv("HOME", str(home))
-    monkeypatch.setenv("USERPROFILE", str(home))
+    set_home(monkeypatch, home)
     return home
 
 

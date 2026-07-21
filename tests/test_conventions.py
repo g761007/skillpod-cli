@@ -35,3 +35,35 @@ def test_no_test_hand_builds_a_file_url() -> None:
         "build file:// URLs with Path.as_uri(), not string interpolation "
         "(it produces file://C:\\... on Windows):\n  " + "\n  ".join(offenders)
     )
+
+
+# `Path.home()` goes through `ntpath.expanduser` on Windows, which reads
+# `USERPROFILE` and never looks at `HOME`. Setting `HOME` alone redirects the
+# home directory on POSIX and does nothing at all on Windows.
+_BARE_HOME_SETENV = re.compile(r"""setenv\(\s*["'](HOME|USERPROFILE)["']""")
+
+
+def test_no_test_sets_home_without_userprofile() -> None:
+    """Redirect the home directory with `set_home`, which sets both variables.
+
+    Setting only `HOME` is not a partial fix — on Windows it is no fix. The
+    home stays wherever it was, so the code under test reads one directory
+    while the test populates another, and all 34 Windows failures in issue #10
+    reported the feature as broken rather than the isolation as inert.
+    """
+    allowed = {"_env.py", Path(__file__).name}
+    offenders: list[str] = []
+    for path in sorted(TESTS_DIR.glob("*.py")):
+        if path.name in allowed:
+            continue
+        for lineno, line in enumerate(
+            path.read_text(encoding="utf-8").splitlines(), start=1
+        ):
+            if _BARE_HOME_SETENV.search(line):
+                offenders.append(f"{path.name}:{lineno}: {line.strip()}")
+
+    assert not offenders, (
+        "set the home directory with tests._env.set_home(monkeypatch, path) — "
+        "setting HOME alone is silently inert on Windows:\n  "
+        + "\n  ".join(offenders)
+    )

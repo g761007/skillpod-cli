@@ -28,6 +28,7 @@ from skillpod.installer.global_apply import execute_apply, plan_apply
 from skillpod.installer.paths import global_skill_dir
 from skillpod.profile.models import GlobalProfileBody
 from skillpod.profile.snapshot import recover_source
+from tests._env import set_home
 from tests._git_fixtures import make_root_skill_repo
 
 
@@ -50,8 +51,7 @@ def isolated_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     home.mkdir()
     cache = tmp_path / "cache"
     cache.mkdir()
-    monkeypatch.setenv("HOME", str(home))
-    monkeypatch.setenv("USERPROFILE", str(home))
+    set_home(monkeypatch, home)
     monkeypatch.setenv("SKILLPOD_CACHE_DIR", str(cache))
     monkeypatch.delenv("SKILLPOD_ACTIVE_PROFILE", raising=False)
     return home
