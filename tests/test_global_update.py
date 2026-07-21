@@ -90,8 +90,10 @@ def test_update_pulls_a_moved_upstream(isolated_env: Path, tmp_path: Path) -> No
 
     report = execute_update(plan, home=isolated_env)
 
-    assert [u.name for u in report.updated] == ["audit"]
+    # Failures are collected rather than raised, so without this the assertion
+    # below would just say "expected ['audit'], got []" and hide the reason.
     assert report.failed == []
+    assert [u.name for u in report.updated] == ["audit"]
     # Content on disk is the new revision, and the record agrees.
     body = (global_skill_dir("audit", isolated_env) / "SKILL.md").read_text(encoding="utf-8")
     assert "revised guidance" in body
@@ -122,6 +124,7 @@ def test_update_puts_the_skill_back_only_where_it_was(
     # Without this the rest passes vacuously: `claude` has the skill from the
     # install and `codex` never did, so the fan-out assertions hold whether or
     # not an update actually ran.
+    assert report.failed == []
     assert [u.name for u in report.updated] == ["audit"]
     assert global_agent_skill_dir("claude", "audit", isolated_env).exists()
     assert not global_agent_skill_dir("codex", "audit", isolated_env).exists()

@@ -22,6 +22,7 @@ from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
+from skillpod.fsutil import rmtree
 from skillpod.installer.adapter import InstallMode
 from skillpod.installer.adapter_default import IdentityAdapter
 from skillpod.installer.errors import InstallConflict, InstallSystemError
@@ -210,7 +211,7 @@ def _materialise_install_root(
                 f"refusing to overwrite existing path at {link} with different "
                 f"content (use --yes / -y to replace)"
             )
-        shutil.rmtree(link)
+        rmtree(link)
     elif link.exists():
         if not force:
             raise InstallConflict(
@@ -254,7 +255,7 @@ def materialise_agent_link(
                 f"(use --yes / -y to replace)"
             )
         if link.is_dir():
-            shutil.rmtree(link)
+            rmtree(link)
         else:
             link.unlink()
 
@@ -315,7 +316,7 @@ def uninstall_global(
         if install_link.is_symlink() or install_link.is_file():
             install_link.unlink()
         else:
-            shutil.rmtree(install_link)
+            rmtree(install_link)
         removed.append(install_link)
 
     for agent in target_agents:
@@ -354,7 +355,7 @@ def unlink_global_fanout(
             link.unlink()
             removed.append(link)
         elif link.is_dir():
-            shutil.rmtree(link)
+            rmtree(link)
             removed.append(link)
     return removed
 

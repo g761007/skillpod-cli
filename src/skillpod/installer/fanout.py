@@ -16,12 +16,12 @@ from __future__ import annotations
 
 import logging
 import os
-import shutil
 import warnings
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager, suppress
 from pathlib import Path
 
+from skillpod.fsutil import rmtree
 from skillpod.installer.adapter import Adapter, InstallMode
 from skillpod.installer.adapter_default import IdentityAdapter
 from skillpod.installer.errors import InstallConflict, InstallSystemError
@@ -109,7 +109,7 @@ def materialise_install_root(
                 f"content (skillpod owns .skillpod/skills/ — pass --yes / -y "
                 f"to replace, or remove it manually)"
             )
-        shutil.rmtree(link)
+        rmtree(link)
     elif link.exists():
         if not force:
             raise InstallConflict(

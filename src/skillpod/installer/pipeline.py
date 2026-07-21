@@ -24,11 +24,11 @@ from __future__ import annotations
 
 import importlib
 import logging
-import shutil
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from skillpod.fsutil import rmtree
 from skillpod.installer.adapter import InstallMode
 from skillpod.installer.adapter_registry import get_adapter, register_adapter, reset_registry
 from skillpod.installer.errors import (
@@ -368,7 +368,7 @@ def uninstall(
         if skill_link.is_symlink():
             skill_link.unlink()
         else:
-            shutil.rmtree(skill_link)
+            rmtree(skill_link)
 
     for agent_entry in manifest.agents:
         link = agent_skill_dir(project_root, agent_entry.name, skill_name)
