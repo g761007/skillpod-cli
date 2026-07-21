@@ -25,9 +25,10 @@ from skillpod.manifest import load as load_manifest
 from skillpod.profile.compose import compose_global_bodies
 from skillpod.profile.errors import ProfileError
 from skillpod.profile.fetch import resolve_profile_target
+from skillpod.profile.io import list_global_profiles, list_project_profiles
 from skillpod.profile.models import GlobalProfileBody
 from skillpod.profile.snapshot import current_global_agents, snapshot_current_global
-from skillpod.state.active import ENV_VAR, global_active_profile_path
+from skillpod.state.active import ENV_VAR, global_active_profile_path, read_active_profile
 from skillpod.state.history import load_previous_global, save_previous_global
 from skillpod.state.io import clear_active_profile, write_active_profile
 
@@ -116,6 +117,42 @@ def _apply_global(
     _emit_report(label, report, json_output)
 
 
+def _list_choices(
+    project_root: Path,
+    manifest_path: Path,
+    *,
+    home: Path | None,
+    json_output: bool,
+) -> None:
+    """Answer "switch to what?" instead of failing on an empty name."""
+    project_profiles: list[str] = []
+    if manifest_path.is_file():
+        project_profiles = list_project_profiles(load_manifest(manifest_path))
+    global_profiles = list_global_profiles(home)
+    active_name, active_scope = read_active_profile(project_root, home=home)
+
+    payload = {
+        "ok": True,
+        "active": {"name": active_name, "scope": active_scope},
+        "profiles": {"project": project_profiles, "global": global_profiles},
+    }
+
+    lines: list[str] = []
+    if active_name:
+        lines.append(f"active: {active_name} ({active_scope})")
+    for name in project_profiles:
+        lines.append(f"  {name}  [project]")
+    for name in global_profiles:
+        lines.append(f"  {name}  [global]")
+    if not project_profiles and not global_profiles:
+        lines.append("No profiles defined. Add a `profiles:` block to skillfile.yml,")
+        lines.append("or run `skillpod profile create <name> --global`.")
+    else:
+        lines.append("")
+        lines.append("Usage: skillpod switch <name>")
+    emit(payload, json_output=json_output, human="\n".join(lines))
+
+
 def run(
     name: str,
     scope: str,
@@ -131,6 +168,12 @@ def run(
     home: Path | None = None,
 ) -> None:
     def _run() -> None:
+        # No argument: show what there is to switch to. Erroring with
+        # "profile '' not found" told the user nothing they could act on.
+        if not name and not back:
+            _list_choices(project_root, manifest_path, home=home, json_output=json_output)
+            return
+
         # Composition (`a+b`) is allowed for global (materialised) and session
         # (env export); a project pointer cannot represent a composite set.
         if "+" in name and scope == "project":

@@ -905,7 +905,11 @@ def switch_command(
     )
 
 
-@profile_app.command("use", help="Set the active profile (alias for 'switch').")
+@profile_app.command(
+    "use",
+    help="Deprecated alias for `skillpod switch`.",
+    deprecated=True,
+)
 def profile_use_cmd(
     name: Annotated[str, typer.Argument(help="Profile name to activate.")],
     scope: Annotated[
