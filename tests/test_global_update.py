@@ -54,10 +54,19 @@ def _install_from(url: str, home: Path, *, agents: list[str] | None = None) -> N
 
 
 def _commit_more(repo: Path, text: str) -> str:
+    """Advance the repo's HEAD, and prove it advanced.
+
+    Tests that rely on "upstream moved" are meaningless if it did not. Checking
+    here makes such a failure surface at its cause rather than three assertions
+    later as a confusing empty update plan.
+    """
+    before = _git(repo, "rev-parse", "HEAD").strip()
     (repo / "SKILL.md").write_text(f"---\ndescription: audit\n---\n{text}\n", encoding="utf-8")
     _git(repo, "add", ".")
     _git(repo, "commit", "-q", "-m", "move upstream")
-    return _git(repo, "rev-parse", "HEAD").strip()
+    after = _git(repo, "rev-parse", "HEAD").strip()
+    assert after != before, f"HEAD did not move: still {before}"
+    return after
 
 
 # ---- the happy path --------------------------------------------------------
@@ -70,7 +79,12 @@ def test_update_pulls_a_moved_upstream(isolated_env: Path, tmp_path: Path) -> No
 
     plan, missing = plan_update(home=isolated_env)
     assert missing == []
-    assert [u.name for u in plan.to_update] == ["audit"]
+    # Spelled out so a failure says which bucket the skill landed in instead of
+    # just "expected ['audit'], got []".
+    assert [u.name for u in plan.to_update] == ["audit"], (
+        f"current={plan.current} unreachable={plan.unreachable} "
+        f"local={plan.skipped_local} unknown={plan.skipped_unknown}"
+    )
     assert plan.to_update[0].from_commit == first
     assert plan.to_update[0].to_commit == second
 
@@ -103,8 +117,12 @@ def test_update_puts_the_skill_back_only_where_it_was(
     _commit_more(repo, "revised")
 
     plan, _missing = plan_update(home=isolated_env)
-    execute_update(plan, home=isolated_env)
+    report = execute_update(plan, home=isolated_env)
 
+    # Without this the rest passes vacuously: `claude` has the skill from the
+    # install and `codex` never did, so the fan-out assertions hold whether or
+    # not an update actually ran.
+    assert [u.name for u in report.updated] == ["audit"]
     assert global_agent_skill_dir("claude", "audit", isolated_env).exists()
     assert not global_agent_skill_dir("codex", "audit", isolated_env).exists()
 
