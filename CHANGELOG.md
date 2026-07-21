@@ -21,6 +21,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`skillpod global update [skill...]`** — refresh globally installed skills
+  to newer upstream content, with `--dry-run` to preview and an optional list
+  of names to narrow the run. `global upgrade` is a hidden alias.
+
+  It is built to stay useful on a skill set nobody curated. Skills whose origin
+  cannot be recovered, ones installed from local directories, and remotes that
+  cannot be reached are each **reported in their own group and skipped** — none
+  of them fails the command, and one dead remote does not stop the rest. On the
+  author's 88 global skills that is 18 updatable, 33 local, 37 unknown.
+
+  The record is reconciled before planning, so a skill set that predates
+  install records is classified rather than reported as empty. `--dry-run`
+  keeps that reconciliation in memory and writes nothing at all.
 - **Install records** — `.skillpod/installed.yml` (project) and
   `~/.skillpod/installed.yml` (global) record what is materialised on *this*
   machine. Both live under `.skillpod/`, which `skillpod init` already

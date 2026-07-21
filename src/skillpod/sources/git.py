@@ -19,6 +19,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from skillpod.fsutil import rmtree
 from skillpod.manifest.models import SourceEntry
 from skillpod.sources import cache as cache_mod
 from skillpod.sources.errors import GitOperationError, SourceError
@@ -95,7 +96,7 @@ def populate_cache(url: str, commit: str) -> Path:
     target.parent.mkdir(parents=True, exist_ok=True)
     staging = cache_mod.staging_dir(commit)
     if staging.exists():
-        shutil.rmtree(staging)
+        rmtree(staging)
     staging.parent.mkdir(parents=True, exist_ok=True)
 
     try:

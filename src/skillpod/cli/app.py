@@ -23,6 +23,7 @@ from skillpod.cli.commands import (
     global_link,
     global_list,
     global_unlink,
+    global_update,
     install_cmd,
     list_cmd,
     profile_add,
@@ -541,6 +542,45 @@ def global_unlink_cmd(
         agents=agent,
         json_output=json,
     )
+
+
+GlobalUpdateSkills = Annotated[
+    list[str] | None,
+    typer.Argument(help="Skill name(s) to update. Omit to update every updatable skill."),
+]
+GlobalUpdateDryRun = Annotated[
+    bool,
+    typer.Option("--dry-run", help="Show what would change without downloading anything."),
+]
+
+
+def _global_update(skill: list[str] | None, dry_run: bool, json: bool) -> None:
+    global_update.run(skills=skill or None, dry_run=dry_run, json_output=json)
+
+
+@global_app.command(
+    "update",
+    help=(
+        "Refresh globally installed skills to newer upstream content. Skills "
+        "with no recoverable source, and those from local directories, are "
+        "reported and skipped rather than failing the run."
+    ),
+)
+def global_update_cmd(
+    skill: GlobalUpdateSkills = None,
+    dry_run: GlobalUpdateDryRun = False,
+    json: JsonOpt = False,
+) -> None:
+    _global_update(skill, dry_run, json)
+
+
+@global_app.command("upgrade", hidden=True, help="Alias for `global update`.")
+def global_upgrade_cmd(
+    skill: GlobalUpdateSkills = None,
+    dry_run: GlobalUpdateDryRun = False,
+    json: JsonOpt = False,
+) -> None:
+    _global_update(skill, dry_run, json)
 
 
 @global_app.command("doctor", help="Check global skills for advisory conflicts.")

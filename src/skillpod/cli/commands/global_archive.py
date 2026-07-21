@@ -14,6 +14,7 @@ from typing import cast
 
 from skillpod.cli._output import emit, fail
 from skillpod.cli.commands.global_list import GlobalSkill, scan_global_skills
+from skillpod.fsutil import rmtree
 from skillpod.installer.paths import global_install_root, global_skill_dir, is_managed_global_fanout
 from skillpod.integrity import hash_directory
 
@@ -85,13 +86,13 @@ def _archive_skill_core(
         if mismatches and force:
             chosen, _ = source_hashes[0]
             assert _is_inside(dest, global_install_root())
-            shutil.rmtree(dest)
+            rmtree(dest)
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.move(str(chosen), str(dest))
             moved_from.append(str(chosen))
             for src, _ in source_hashes[1:]:
                 if src.is_dir() and not src.is_symlink():
-                    shutil.rmtree(src)
+                    rmtree(src)
                 else:
                     src.unlink()
                 removed.append(str(src))
@@ -99,7 +100,7 @@ def _archive_skill_core(
             skipped_existing = True
             for src, _ in source_hashes:
                 if src.is_dir() and not src.is_symlink():
-                    shutil.rmtree(src)
+                    rmtree(src)
                 else:
                     src.unlink()
                 removed.append(str(src))
@@ -123,7 +124,7 @@ def _archive_skill_core(
         moved_from.append(str(chosen))
         for src, _ in source_hashes[1:]:
             if src.is_dir() and not src.is_symlink():
-                shutil.rmtree(src)
+                rmtree(src)
             else:
                 src.unlink()
             removed.append(str(src))

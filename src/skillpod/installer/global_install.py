@@ -22,6 +22,7 @@ from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
+from skillpod.fsutil import rmtree
 from skillpod.installer.adapter import InstallMode
 from skillpod.installer.adapter_default import IdentityAdapter
 from skillpod.installer.errors import InstallConflict, InstallSystemError
@@ -210,7 +211,7 @@ def _materialise_install_root(
                 f"refusing to overwrite existing path at {link} with different "
                 f"content (use --yes / -y to replace)"
             )
-        shutil.rmtree(link)
+        rmtree(link)
     elif link.exists():
         if not force:
             raise InstallConflict(
@@ -254,7 +255,7 @@ def materialise_agent_link(
                 f"(use --yes / -y to replace)"
             )
         if link.is_dir():
-            shutil.rmtree(link)
+            rmtree(link)
         else:
             link.unlink()
 
@@ -275,6 +276,22 @@ def materialise_agent_link(
         raise InstallSystemError(
             f"could not materialise global fan-out at {link}: {exc}"
         ) from exc
+
+
+def agents_with_skill(skill_name: str, home: Path | None = None) -> list[str]:
+    """Agents that currently have a *managed* fan-out for ``skill_name``.
+
+    `global update` re-materialises a skill in place and must put it back only
+    where it already was — silently adding it to every agent would be a
+    behaviour change the user did not ask for.
+    """
+    return [
+        agent
+        for agent in DEFAULT_GLOBAL_AGENTS
+        if is_managed_global_fanout(
+            global_agent_skill_dir(agent, skill_name, home), skill_name, home
+        )
+    ]
 
 
 def uninstall_global(
@@ -299,7 +316,7 @@ def uninstall_global(
         if install_link.is_symlink() or install_link.is_file():
             install_link.unlink()
         else:
-            shutil.rmtree(install_link)
+            rmtree(install_link)
         removed.append(install_link)
 
     for agent in target_agents:
@@ -338,7 +355,7 @@ def unlink_global_fanout(
             link.unlink()
             removed.append(link)
         elif link.is_dir():
-            shutil.rmtree(link)
+            rmtree(link)
             removed.append(link)
     return removed
 
@@ -347,6 +364,7 @@ __all__ = [
     "DEFAULT_GLOBAL_AGENTS",
     "GlobalInstallReport",
     "GlobalInstalledSkill",
+    "agents_with_skill",
     "install_global",
     "materialise_agent_link",
     "uninstall_global",
