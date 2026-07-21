@@ -1,10 +1,12 @@
-"""`skillpod outdated` — diff lockfile commits against latest upstream.
+"""`skillpod outdated` — diff recorded commits against latest upstream.
 
-Simplification (documented here): the lockfile does not record whether a skill
-was installed via the registry or an explicit git source.  Every locked entry
-carries a ``url`` that is a valid git remote, so this command uses
-``git ls-remote --exit-code <url> HEAD`` uniformly for all entries.
-The user-visible output is identical regardless of the original source kind.
+Every git-backed record entry carries a ``source`` that is a valid git remote,
+so this command uses ``git ls-remote --exit-code <url> HEAD`` uniformly and the
+user-visible output is identical regardless of the original source kind.
+
+Entries with nothing to compare against — local sources, and skills whose
+provenance could not be recovered — are skipped rather than reported as
+drifted. Drift is unknowable for them, and claiming otherwise would be a lie.
 """
 
 from __future__ import annotations
@@ -14,7 +16,8 @@ from pathlib import Path
 from typing import Any
 
 from skillpod.cli._output import emit, fail
-from skillpod.lockfile import io as lockfile_io
+from skillpod.installer.paths import project_record_path
+from skillpod.record import io as record_io
 from skillpod.sources.errors import GitOperationError
 
 
@@ -47,24 +50,29 @@ def run(
     manifest_path: Path,
     json_output: bool,
 ) -> None:
-    lockfile_path = project_root / "skillfile.lock"
-    lock = lockfile_io.read(lockfile_path)
+    installed = record_io.read(project_record_path(project_root)).installed
+    comparable = {
+        name: rec
+        for name, rec in installed.items()
+        if rec.kind in ("git", "registry") and rec.source and rec.commit
+    }
 
-    if not lock.resolved:
+    if not comparable:
         payload = {"ok": True, "skills": []}
-        emit(payload, json_output=json_output, human="No locked skills.")
+        emit(payload, json_output=json_output, human="No git-backed skills installed.")
         return
 
     rows: list[dict[str, Any]] = []
     try:
-        for name, locked in lock.resolved.items():
-            latest = _latest_commit(locked.url)
+        for name, rec in comparable.items():
+            assert rec.source is not None  # narrowed by `comparable`
+            latest = _latest_commit(rec.source)
             rows.append(
                 {
                     "name": name,
-                    "locked": locked.commit,
+                    "installed": rec.commit,
                     "latest": latest,
-                    "drift": locked.commit != latest,
+                    "drift": rec.commit != latest,
                 }
             )
     except GitOperationError as exc:
@@ -76,14 +84,14 @@ def run(
         return
 
     if not rows:
-        emit(payload, json_output=False, human="No locked skills.")
+        emit(payload, json_output=False, human="No git-backed skills installed.")
         return
 
-    col_headers = ["name", "locked-commit", "latest-commit", "drift"]
+    col_headers = ["name", "installed", "latest", "drift"]
     rows_display = [
         [
             r["name"],
-            r["locked"][:12],
+            r["installed"][:12],
             r["latest"][:12],
             "yes" if r["drift"] else "no",
         ]

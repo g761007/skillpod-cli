@@ -16,7 +16,6 @@ import httpx
 import pytest
 import respx
 
-from skillpod import lockfile as lockfile_pkg
 from skillpod.installer import (
     AdapterImportError,
     InstallConflict,
@@ -29,7 +28,9 @@ from skillpod.installer import (
 from skillpod.installer.adapter import InstallMode
 from skillpod.installer.adapter_default import IdentityAdapter
 from skillpod.installer.adapter_registry import register_adapter
+from skillpod.installer.paths import project_record_path
 from skillpod.integrity import hash_directory
+from skillpod.record import io as record_io
 from tests._git_fixtures import make_skill_repo
 
 _REGISTRY_BASE = "https://registry.test"
@@ -93,8 +94,13 @@ def test_local_skill_materialised_and_fanned_out(tmp_path: Path) -> None:
         assert link.resolve() == skill_link.resolve()
 
 
-def test_local_skill_does_not_get_lockfile_entry(tmp_path: Path) -> None:
-    """Scenario: Manifest with a local skill produces no lock entry."""
+def test_local_skill_is_recorded(tmp_path: Path) -> None:
+    """A local skill lands in the install record.
+
+    This inverts the old lockfile behaviour, which refused local sources
+    because it could not pin them. A record has nothing to pin — it states
+    what is on disk, and a local skill is just as installed as a git one.
+    """
     skills_root = tmp_path / "pool"
     (skills_root / "audit").mkdir(parents=True)
     proj = _project(
@@ -112,8 +118,11 @@ def test_local_skill_does_not_get_lockfile_entry(tmp_path: Path) -> None:
 
     install(proj)
 
-    lock = lockfile_pkg.read(proj / "skillfile.lock")
-    assert lock.resolved == {}
+    installed = record_io.read(project_record_path(proj)).installed
+    assert installed["audit"].kind == "local"
+    assert installed["audit"].source == str(skills_root / "audit")
+    assert installed["audit"].commit is None
+    assert installed["audit"].sha256 is not None
 
 
 def test_agents_not_listed_get_no_fanout(tmp_path: Path) -> None:
@@ -288,19 +297,23 @@ def test_group_lockfile_matches_flat_equivalent_manifest(tmp_path: Path) -> None
     install(grouped)
     install(flat)
 
-    grouped_lock = lockfile_pkg.read(grouped / "skillfile.lock")
-    flat_lock = lockfile_pkg.read(flat / "skillfile.lock")
-    assert set(grouped_lock.resolved) == {"audit", "polish"}
-    assert grouped_lock == flat_lock
-    assert grouped_lock.resolved["audit"].commit == audit_sha
-    assert grouped_lock.resolved["polish"].commit == polish_sha
+    grouped_record = record_io.read(project_record_path(grouped))
+    flat_record = record_io.read(project_record_path(flat))
+    assert set(grouped_record.installed) == {"audit", "polish"}
+    assert grouped_record == flat_record
+    assert grouped_record.installed["audit"].commit == audit_sha
+    assert grouped_record.installed["polish"].commit == polish_sha
 
 
-# ---- Git source: lockfile written, no registry leakage ---------------------
+# ---- Git source: record written, no registry leakage -----------------------
 
 
-def test_git_skill_writes_lockfile_with_no_registry_field(tmp_path: Path) -> None:
-    """Scenario: Lockfile after first install + Registry name absent."""
+def test_git_skill_is_recorded_with_ref_and_commit(tmp_path: Path) -> None:
+    """The record keeps both the ref followed and the commit it reached.
+
+    `commit` alone cannot distinguish "tracking main" from "pinned to this
+    SHA", and `update` needs to know which one it is re-resolving against.
+    """
     repo_path, sha = make_skill_repo(tmp_path / "git-side")
     proj = _project(
         tmp_path,
@@ -324,23 +337,28 @@ def test_git_skill_writes_lockfile_with_no_registry_field(tmp_path: Path) -> Non
     assert installed.resolved.commit == sha
     assert installed.sha256 == hash_directory(installed.project_path)
 
-    lock = lockfile_pkg.read(proj / "skillfile.lock")
-    assert "audit" in lock.resolved
-    locked = lock.resolved["audit"]
-    assert locked.source == "git"
-    assert locked.url == str(repo_path)
-    assert locked.commit == sha
-    assert len(locked.sha256) == 64
-    text = (proj / "skillfile.lock").read_text(encoding="utf-8")
+    rec = record_io.read(project_record_path(proj)).installed["audit"]
+    assert rec.kind == "git"
+    assert rec.source == str(repo_path)
+    assert rec.ref == "main"
+    assert rec.commit == sha
+    assert rec.sha256 is not None and len(rec.sha256) == 64
+    text = project_record_path(proj).read_text(encoding="utf-8")
     assert "registry" not in text
 
 
-# ---- Frozen mode (lockfile drift) ------------------------------------------
+# ---- The record does not pin ------------------------------------------------
 
 
-def test_frozen_mode_commit_drift_aborts(tmp_path: Path) -> None:
-    """Scenario: Lockfile commit drift aborts install."""
-    repo_path, _real_sha = make_skill_repo(tmp_path / "git-side")
+def test_stale_record_does_not_pin_install(tmp_path: Path) -> None:
+    """A record naming a commit that no longer exists must not break install.
+
+    This is the exact inverse of the old frozen-mode behaviour, where a
+    lockfile commit was replayed and a mismatch aborted the run. A record
+    describes the past; resolution follows the manifest's ref and the record
+    is then overwritten with what actually happened.
+    """
+    repo_path, real_sha = make_skill_repo(tmp_path / "git-side")
     proj = _project(
         tmp_path,
         textwrap.dedent(f"""
@@ -358,32 +376,36 @@ def test_frozen_mode_commit_drift_aborts(tmp_path: Path) -> None:
     )
 
     bad_commit = "deadbeef" * 5  # 40 hex chars, never matches the real commit
-    fake_sha = "f" * 64
-    (proj / "skillfile.lock").write_text(
+    record_path = project_record_path(proj)
+    record_path.parent.mkdir(parents=True, exist_ok=True)
+    record_path.write_text(
         textwrap.dedent(f"""
             version: 1
-            resolved:
+            installed:
               audit:
-                source: git
-                url: {repo_path}
+                kind: git
+                source: {repo_path}
+                ref: main
                 commit: {bad_commit}
-                sha256: {fake_sha}
         """).lstrip(),
         encoding="utf-8",
     )
 
-    with pytest.raises(InstallSystemError):
-        # Resolving the locked (nonexistent) commit fails inside git checkout.
-        install(proj)
+    report = install(proj)
 
-    # Project unchanged
-    assert not (proj / ".skillpod").exists()
-    assert not (proj / ".claude").exists()
+    # Installed successfully against the real ref, and the record now says so.
+    assert report.installed[0].resolved.commit == real_sha
+    assert record_io.read(record_path).installed["audit"].commit == real_sha
+    assert (proj / ".claude" / "skills" / "audit").exists()
 
 
-def test_frozen_mode_round_trip_succeeds(tmp_path: Path) -> None:
-    """Re-running install after a successful run uses the lockfile and
-    leaves it unchanged."""
+def test_second_install_skips_already_satisfied_skill(tmp_path: Path) -> None:
+    """`install` leaves an already-installed, still-matching skill alone.
+
+    Skipping is what makes a repeat `install` cheap and offline — the skill is
+    never re-resolved, so `ls-remote` is never called. Asking for newer content
+    is `skillpod update`, not a side effect of running install again.
+    """
     repo_path, sha = make_skill_repo(tmp_path / "git-side")
     proj = _project(
         tmp_path,
@@ -400,14 +422,42 @@ def test_frozen_mode_round_trip_succeeds(tmp_path: Path) -> None:
                 source: anthropic
         """),
     )
-    install(proj)
-    first_lock = (proj / "skillfile.lock").read_text(encoding="utf-8")
+    first = install(proj)
+    assert [s.name for s in first.installed] == ["audit"]
+    assert first.skipped == []
+    first_record = project_record_path(proj).read_text(encoding="utf-8")
 
     second = install(proj)
-    second_lock = (proj / "skillfile.lock").read_text(encoding="utf-8")
 
-    assert second.installed[0].resolved.commit == sha
-    assert first_lock == second_lock
+    assert second.installed == []
+    assert second.skipped == ["audit"]
+    assert project_record_path(proj).read_text(encoding="utf-8") == first_record
+    assert first.installed[0].resolved.commit == sha
+
+
+def test_refresh_overrides_the_skip(tmp_path: Path) -> None:
+    """`refresh` is how `skillpod update` opts back into re-resolution."""
+    repo_path, _sha = make_skill_repo(tmp_path / "git-side")
+    proj = _project(
+        tmp_path,
+        textwrap.dedent(f"""
+            version: 1
+            agents: [claude]
+            sources:
+              - name: anthropic
+                type: git
+                url: {repo_path}
+                ref: main
+            skills:
+              - name: audit
+                source: anthropic
+        """),
+    )
+    install(proj)
+
+    refreshed = install(proj, refresh=True)
+    assert [s.name for s in refreshed.installed] == ["audit"]
+    assert refreshed.skipped == []
 
 
 # ---- Registry fallback ------------------------------------------------------
@@ -444,10 +494,10 @@ def test_registry_fallback_when_no_source_matches(tmp_path: Path) -> None:
     )
 
     install(proj)
-    lock = lockfile_pkg.read(proj / "skillfile.lock")
-    locked = lock.resolved["audit"]
-    assert locked.commit == sha
-    assert locked.url == str(repo_path)
+    rec = record_io.read(project_record_path(proj)).installed["audit"]
+    assert rec.kind == "registry"
+    assert rec.commit == sha
+    assert rec.source == str(repo_path)
 
 
 @respx.mock
@@ -468,7 +518,6 @@ def test_registry_failure_aborts_and_leaves_no_artefacts(tmp_path: Path) -> None
         install(proj)
     assert not (proj / ".skillpod").exists()
     assert not (proj / ".claude").exists()
-    assert not (proj / "skillfile.lock").exists()
 
 
 # ---- Conflict refusal -------------------------------------------------------
@@ -498,9 +547,9 @@ def test_refuses_to_overwrite_unmanaged_directory(tmp_path: Path) -> None:
     with pytest.raises(InstallConflict):
         install(proj)
 
-    # User content untouched + nothing materialised + no lockfile.
+    # User content untouched + nothing materialised + no install record.
     assert (user_dir / "user-content.md").read_text() == "hands off"
-    assert not (proj / "skillfile.lock").exists()
+    assert not project_record_path(proj).exists()
     # Rollback removed the .skillpod/skills/audit copy it had created.
     assert not (proj / ".skillpod" / "skills" / "audit").exists()
 
@@ -1071,3 +1120,54 @@ def test_misbehaving_adapter_source_mutation_detected(
 
     with pytest.raises(InstallSystemError, match="source_dir was mutated"):
         install(proj)
+
+
+def test_migration_from_lockfile_avoids_redownloading(tmp_path: Path) -> None:
+    """Upgrading skillpod in an established project must not re-fetch anything.
+
+    Such a project has a committed skillfile.lock and materialised skills but
+    no install record. Seeding the record from the lockfile is what lets the
+    first post-upgrade `install` recognise everything as already satisfied.
+    """
+    repo_path, sha = make_skill_repo(tmp_path / "git-side")
+    proj = _project(
+        tmp_path,
+        textwrap.dedent(f"""
+            version: 1
+            agents: [claude]
+            sources:
+              - name: anthropic
+                type: git
+                url: {repo_path}
+                ref: main
+            skills:
+              - name: audit
+                source: anthropic
+        """),
+    )
+    install(proj)
+
+    # Simulate the pre-upgrade state: lockfile present, record absent, skills
+    # still materialised on disk.
+    project_record_path(proj).unlink()
+    (proj / "skillfile.lock").write_text(
+        textwrap.dedent(f"""
+            version: 1
+            resolved:
+              audit:
+                source: git
+                url: {repo_path}
+                commit: {sha}
+                sha256: {hash_directory(proj / ".skillpod" / "skills" / "audit")}
+        """).lstrip(),
+        encoding="utf-8",
+    )
+
+    report = install(proj)
+
+    assert report.skipped == ["audit"]
+    assert report.installed == []
+    # The record now exists in its own right, and the lockfile is left for the
+    # user to remove.
+    assert record_io.read(project_record_path(proj)).installed["audit"].commit == sha
+    assert (proj / "skillfile.lock").is_file()

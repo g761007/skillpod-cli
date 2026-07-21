@@ -3,15 +3,21 @@
 Pipeline ordering (per `installer/spec.md`):
 
     read manifest
-        -> resolve sources (with registry fallback)
+        -> skip skills the record already accounts for
+        -> resolve the rest (with registry fallback)
         -> fetch into cache
         -> materialise .skillpod/skills/<name>
         -> fan out via adapter (symlink/copy/hardlink) to enabled agents
-        -> integrity check against lockfile (if any)
-        -> write skillfile.lock
+        -> write .skillpod/installed.yml
 
 A failure in any step rolls back project filesystem state from the
 current run.
+
+``install`` means **make reality match the recommendation**: bring in what is
+missing and leave alone what is already there. It never reaches for the
+network on behalf of a skill that is already installed and still matches what
+the manifest declares. Refreshing to newer upstream content is
+``skillpod update`` — a separate, explicit act.
 """
 
 from __future__ import annotations
@@ -27,7 +33,6 @@ from skillpod.installer.adapter import InstallMode
 from skillpod.installer.adapter_registry import get_adapter, register_adapter, reset_registry
 from skillpod.installer.errors import (
     AdapterImportError,
-    FrozenDriftError,
     InstallError,
     InstallSystemError,
     InstallUserError,
@@ -38,14 +43,19 @@ from skillpod.installer.fanout import (
     materialise_install_root,
     rollback_on_failure,
 )
-from skillpod.installer.paths import agent_skill_dir, project_skill_dir
+from skillpod.installer.paths import (
+    agent_skill_dir,
+    project_record_path,
+    project_skill_dir,
+)
 from skillpod.installer.resolve import resolve_skill
 from skillpod.installer.user_skills import discover_user_skills, resolve_user_skill
 from skillpod.integrity import hash_directory
-from skillpod.lockfile import io as lockfile_io
-from skillpod.lockfile.models import LockedSkill, Lockfile
 from skillpod.manifest import load as load_manifest
-from skillpod.manifest.models import AgentEntry, SkillEntry
+from skillpod.manifest.models import AgentEntry, SkillEntry, SourceEntry
+from skillpod.record import io as record_io
+from skillpod.record.migrate import LEGACY_LOCKFILE, migrate_lockfile
+from skillpod.record.models import InstallRecord, SkillRecord
 from skillpod.registry import RegistryError, TrustError
 from skillpod.sources.errors import GitOperationError, SourceError
 from skillpod.sources.types import ResolvedSkill
@@ -58,48 +68,97 @@ class InstalledSkill:
     name: str
     resolved: ResolvedSkill
     project_path: Path
-    sha256: str | None  # None for local sources (not lockable)
+    sha256: str  # every materialised skill gets a digest, local included
 
 
 @dataclass
 class InstallReport:
     project_root: Path
     manifest_path: Path
-    lockfile_path: Path
+    record_path: Path
     installed: list[InstalledSkill] = field(default_factory=list)
+    skipped: list[str] = field(default_factory=list)
     fanned_out_to: list[str] = field(default_factory=list)
 
 
 def _project_paths(project_root: Path) -> tuple[Path, Path]:
     return (
         project_root / "skillfile.yml",
-        project_root / "skillfile.lock",
+        project_record_path(project_root),
     )
 
 
-def _lockfile_for(report: InstallReport) -> Lockfile:
-    resolved: dict[str, LockedSkill] = {}
-    for entry in report.installed:
-        if entry.resolved.source_kind == "local":
-            continue  # local sources are not lockable
-        if entry.resolved.url is None or entry.resolved.commit is None:
-            continue  # paranoia: shouldn't happen for git/registry kinds
-        assert entry.sha256 is not None
-        resolved[entry.name] = LockedSkill(
-            source="git",
-            url=entry.resolved.url,
-            commit=entry.resolved.commit,
+def _record_entry(entry: InstalledSkill) -> SkillRecord:
+    """Describe one materialised skill for the install record."""
+    resolved = entry.resolved
+    if resolved.source_kind == "local":
+        # Local skills are recorded by the directory they were copied from.
+        # The lockfile could not express this at all; a record has nothing to
+        # pin, so there is no reason to omit them.
+        return SkillRecord(
+            kind="local",
+            source=str(resolved.path),
             sha256=entry.sha256,
         )
-    return Lockfile(version=1, resolved=resolved)
+    return SkillRecord(
+        kind=resolved.source_kind,
+        source=resolved.url,
+        ref=resolved.ref,
+        commit=resolved.commit,
+        sha256=entry.sha256,
+    )
+
+
+def _already_satisfied(
+    skill: SkillEntry,
+    source_map: dict[str, SourceEntry],
+    existing: SkillRecord | None,
+    skills_root: Path,
+) -> bool:
+    """True when `skill` needs no work — already installed, still matching.
+
+    Answering *without touching the network* is the point: a project whose
+    skills are all present should re-`install` offline and instantly. Anything
+    that might have changed upstream is deliberately not considered, because
+    chasing upstream is what ``skillpod update`` is for.
+    """
+    if existing is None or not (skills_root / skill.name).is_dir():
+        return False
+
+    # Local sources are cheap to re-read and the user may have edited them
+    # in place, so they are never skipped.
+    if existing.kind == "local":
+        return False
+
+    # An authored pin is the one thing that must still agree.
+    if skill.version is not None:
+        return existing.commit == skill.version
+
+    if skill.source is not None:
+        declared = source_map.get(skill.source)
+        if declared is None or declared.type != "git":
+            return False
+        if existing.source != declared.url:
+            return False
+        # A record with no ref came from the retired lockfile, which never
+        # stored one. Unknown is not evidence of a mismatch — treating it as
+        # one would re-download every skill in every migrated project, which
+        # is exactly what seeding the record from the lockfile prevents.
+        # `skillpod update` re-resolves and fills the ref in properly.
+        return existing.ref is None or existing.ref == declared.ref
+
+    # Registry-resolved or probed: a record plus a materialised directory is
+    # enough. `skillpod update` is how the user asks for something newer.
+    return True
 
 
 def install(
     project_root: Path,
     *,
     manifest_path: Path | None = None,
-    lockfile_path: Path | None = None,
+    record_path: Path | None = None,
     agent_filter: list[str] | None = None,
+    refresh: bool | list[str] = False,
 ) -> InstallReport:
     """Run the full install pipeline against `project_root`.
 
@@ -109,12 +168,17 @@ def install(
     targets get materialised in this run. Used by `skillpod add ... -a`
     to limit a single install to a subset of agents without rewriting
     the manifest's global `agents:` list.
+
+    `refresh` opts out of the already-satisfied skip: ``True`` re-resolves
+    everything, a list re-resolves only those names. This is how
+    `skillpod update` asks for newer upstream content — `install` on its own
+    never does.
     """
 
     project_root = Path(project_root).resolve()
-    default_manifest, default_lockfile = _project_paths(project_root)
+    default_manifest, default_record = _project_paths(project_root)
     manifest_path = (manifest_path or default_manifest).resolve()
-    lockfile_path = (lockfile_path or default_lockfile).resolve()
+    record_path = (record_path or default_record).resolve()
 
     try:
         manifest = load_manifest(manifest_path)
@@ -126,7 +190,21 @@ def install(
     reset_registry()
     _register_manifest_adapters(manifest.agents)
 
-    existing_lock = lockfile_io.read(lockfile_path)
+    existing_record = record_io.read(record_path)
+    if not existing_record.installed:
+        # First run in a project that predates install records: seed from the
+        # legacy lockfile so an established project does not re-download
+        # everything. The lockfile itself is left in place for the user to
+        # remove — it is committed, and deleting it is not ours to decide.
+        migrated = migrate_lockfile(project_root)
+        if migrated is not None:
+            existing_record = migrated
+            logger.info(
+                "seeded install record from %s; you can now `git rm %s`",
+                LEGACY_LOCKFILE,
+                LEGACY_LOCKFILE,
+            )
+
     flat_skills = flatten(manifest)
     user_skills = discover_user_skills(project_root)
     flat_names = {skill.name for skill in flat_skills}
@@ -144,32 +222,38 @@ def install(
         if name not in flat_names:
             effective_skills.append(SkillEntry(name=name))
 
-    # Phase 1 — resolve every skill before mutating the project.
-    plan: list[tuple[ResolvedSkill, LockedSkill | None]] = []
+    # Phase 1 — decide what needs work, then resolve only that, before
+    # mutating anything. Skipped skills never reach the network.
+    source_map = {s.name: s for s in manifest.sources}
+    skills_root = project_root / ".skillpod" / "skills"
+    plan: list[ResolvedSkill] = []
+    skipped: list[str] = []
+
     for skill in effective_skills:
         user_skill_path = user_skills.get(skill.name)
         if user_skill_path is not None:
-            resolved = resolve_user_skill(skill.name, user_skill_path)
-            locked_entry = None
-        else:
-            locked_entry = existing_lock.resolved.get(skill.name)
-            try:
-                resolved = resolve_skill(skill, manifest, locked=locked_entry)
-            except TrustError as exc:
-                raise InstallUserError(str(exc)) from exc
-            except RegistryError as exc:
-                raise InstallSystemError(f"registry: {exc}") from exc
-            except GitOperationError as exc:
-                raise InstallSystemError(f"git: {exc}") from exc
-            except SourceError as exc:
-                raise InstallUserError(str(exc)) from exc
+            plan.append(resolve_user_skill(skill.name, user_skill_path))
+            continue
 
-        if locked_entry is not None and resolved.commit != locked_entry.commit:
-            raise FrozenDriftError(
-                f"frozen mode: {skill.name} resolved to {resolved.commit}, "
-                f"but lockfile pins {locked_entry.commit}"
-            )
-        plan.append((resolved, locked_entry))
+        wants_refresh = refresh is True or (
+            isinstance(refresh, list) and skill.name in refresh
+        )
+        if not wants_refresh and _already_satisfied(
+            skill, source_map, existing_record.installed.get(skill.name), skills_root
+        ):
+            skipped.append(skill.name)
+            continue
+
+        try:
+            plan.append(resolve_skill(skill, manifest))
+        except TrustError as exc:
+            raise InstallUserError(str(exc)) from exc
+        except RegistryError as exc:
+            raise InstallSystemError(f"registry: {exc}") from exc
+        except GitOperationError as exc:
+            raise InstallSystemError(f"git: {exc}") from exc
+        except SourceError as exc:
+            raise InstallUserError(str(exc)) from exc
 
     # Phase 2 — materialise and fan out under a rollback guard.
     if agent_filter is not None:
@@ -186,7 +270,8 @@ def install(
     report = InstallReport(
         project_root=project_root,
         manifest_path=manifest_path,
-        lockfile_path=lockfile_path,
+        record_path=record_path,
+        skipped=skipped,
         fanned_out_to=[a.name for a in active_agents],
     )
 
@@ -194,24 +279,19 @@ def install(
     fallback: list[str] = [str(f) for f in manifest.install.fallback]
     source_violation_reported: set[str] = set()
 
-    with rollback_on_failure() as record:
-        for resolved, locked_entry in plan:
+    with rollback_on_failure() as rollback:
+        for resolved in plan:
             skill_link = project_skill_dir(project_root, resolved.name)
             materialise_install_root(
                 skill_link,
                 resolved.path,
                 skill_name=resolved.name,
-                record=record,
+                record=rollback,
             )
 
-            sha256: str | None = None
-            if resolved.source_kind != "local":
-                sha256 = hash_directory(skill_link)
-                if locked_entry is not None and sha256 != locked_entry.sha256:
-                    raise FrozenDriftError(
-                        f"frozen mode: {resolved.name} content sha256 "
-                        f"{sha256} does not match lockfile {locked_entry.sha256}"
-                    )
+            # Every materialised skill gets a digest, local included — the
+            # record describes what is on disk, and local content is on disk.
+            sha256 = hash_directory(skill_link)
 
             # Snapshot source_dir mtimes for mutation detection.
             source_snapshot = _snapshot_source(skill_link)
@@ -228,7 +308,7 @@ def install(
                     mode=install_mode,
                     fallback=fallback,
                     adapter=adapter,
-                    record=record,
+                    record=rollback,
                 )
 
             # Detect any adapter that wrote into source_dir.
@@ -246,12 +326,19 @@ def install(
                 )
             )
 
-    # Phase 3 — write lockfile.
-    new_lock = _lockfile_for(report)
+    # Phase 3 — write the install record. Skipped skills keep the entry they
+    # already had; nothing was re-resolved for them, so nothing changed.
+    entries = {
+        name: existing_record.installed[name]
+        for name in skipped
+        if name in existing_record.installed
+    }
+    for entry in report.installed:
+        entries[entry.name] = _record_entry(entry)
     try:
-        lockfile_io.write(lockfile_path, new_lock)
+        record_io.write(record_path, InstallRecord(installed=entries))
     except OSError as exc:
-        raise InstallSystemError(f"failed to write lockfile: {exc}") from exc
+        raise InstallSystemError(f"failed to write install record: {exc}") from exc
 
     return report
 
@@ -261,17 +348,15 @@ def uninstall(
     skill_name: str,
     *,
     manifest_path: Path | None = None,
-    lockfile_path: Path | None = None,
 ) -> None:
     """Remove `<.skillpod/skills/<name>>` and every managed agent fan-out symlink.
 
-    Caller is responsible for editing the manifest first; this function
-    only operates on filesystem artefacts.
+    Caller is responsible for editing the manifest and the install record;
+    this function only operates on filesystem artefacts.
     """
     project_root = Path(project_root).resolve()
-    default_manifest, default_lockfile = _project_paths(project_root)
+    default_manifest, _ = _project_paths(project_root)
     manifest_path = (manifest_path or default_manifest).resolve()
-    lockfile_path = (lockfile_path or default_lockfile).resolve()
 
     try:
         manifest = load_manifest(manifest_path)

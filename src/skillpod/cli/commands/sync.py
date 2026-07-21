@@ -1,13 +1,13 @@
-"""`skillpod sync` — re-create fan-out entries from the lockfile.
+"""`skillpod sync` — re-create fan-out entries from the install record.
 
 Sync is the offline counterpart to `install`:
 - It does not consult the registry.
-- It does not mutate the lockfile.
+- It does not mutate the record.
 - It can be re-run repeatedly without producing a diff after the first run.
 
-For local-sourced skills (which have no lockfile entry) sync still has
-to consult the manifest's source list, but it only walks declared
-sources — never the registry.
+For skills the record describes as local, sync consults the manifest's source
+list to find them again, but it only walks declared sources — never the
+registry.
 
 The optional ``--agent <id>`` flag restricts fan-out cleanup and
 re-render to a single agent, leaving all other agents untouched.
@@ -27,17 +27,17 @@ from skillpod.installer import (
 from skillpod.installer.errors import InstallUserError
 from skillpod.installer.expand import flatten
 from skillpod.installer.fanout import rollback_on_failure
-from skillpod.installer.paths import agent_skill_dir
+from skillpod.installer.paths import agent_skill_dir, project_record_path
 from skillpod.installer.user_skills import discover_user_skills
-from skillpod.lockfile import io as lockfile_io
 from skillpod.manifest import load as load_manifest
 from skillpod.manifest.models import SkillEntry, SourceEntry
+from skillpod.record import io as record_io
 from skillpod.sources.git import populate_cache
 from skillpod.sources.local import resolve_local
 
 
-def _populate_from_lock(lock_url: str, commit: str) -> Path:
-    return populate_cache(lock_url, commit)
+def _populate_from_record(url: str, commit: str) -> Path:
+    return populate_cache(url, commit)
 
 
 def _project_path_from_local(project_root: Path, skill_name: str, manifest_sources: list[SourceEntry]) -> Path:
@@ -51,7 +51,7 @@ def _project_path_from_local(project_root: Path, skill_name: str, manifest_sourc
             continue
         return resolved.path
     raise FileNotFoundError(
-        f"sync: no local source provides {skill_name!r} (and skill is not in lockfile)"
+        f"sync: no local source provides {skill_name!r} (and it is not in the install record)"
     )
 
 
@@ -76,7 +76,7 @@ def _sync_impl(
         [agent_filter] if agent_filter is not None else all_agent_names
     )
 
-    lock = lockfile_io.read(project_root / "skillfile.lock")
+    installed = record_io.read(project_record_path(project_root)).installed
     user_skills = discover_user_skills(project_root)
     skills = flatten(manifest)
     skill_names = {skill.name for skill in skills}
@@ -86,13 +86,13 @@ def _sync_impl(
             skill_names.add(name)
 
     rebuilt: list[str] = []
-    with rollback_on_failure() as record:
+    with rollback_on_failure() as rollback:
         for skill in skills:
-            locked = lock.resolved.get(skill.name)
+            rec = installed.get(skill.name)
             if skill.name in user_skills:
                 target = user_skills[skill.name]
-            elif locked is not None:
-                cache_dir = _populate_from_lock(locked.url, locked.commit)
+            elif rec is not None and rec.commit and rec.source:
+                cache_dir = _populate_from_record(rec.source, rec.commit)
                 target = (cache_dir / skill.name).resolve()
             else:
                 target = _project_path_from_local(project_root, skill.name, manifest.sources)
@@ -102,12 +102,12 @@ def _sync_impl(
                 skill_link,
                 target,
                 skill_name=skill.name,
-                record=record,
+                record=rollback,
             )
 
             for agent_name in active_agents:
                 fanout = agent_skill_dir(project_root, agent_name, skill.name)
-                create_managed_fanout_symlink(fanout, skill_link, project_root, record=record)
+                create_managed_fanout_symlink(fanout, skill_link, project_root, record=rollback)
             rebuilt.append(skill.name)
 
     return {

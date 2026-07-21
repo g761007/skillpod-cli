@@ -7,7 +7,7 @@ Priority semantics (per `source-resolver/spec.md`):
 - Otherwise, sources are probed in descending ``priority`` order and the
   first source that yields the skill wins.
 - The registry fallback lives in `skillpod.installer` (because it has
-  side-effects on lockfile decisions) and is not part of this module.
+  side-effects on install-record decisions) and is not part of this module.
 """
 
 from __future__ import annotations

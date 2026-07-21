@@ -131,8 +131,9 @@ def resolve_git(
 ) -> ResolvedSkill:
     """Resolve ``skill_name`` against a `git` source.
 
-    ``explicit_commit`` lets the installer skip the ls-remote step when
-    a lockfile already pins a commit.
+    ``explicit_commit`` lets the caller skip the ls-remote step when the
+    commit is already known — an authored ``skills[].version`` pin, or the
+    registry handing back a resolved SHA.
     """
     if source.type != "git":
         raise SourceError(f"resolve_git called for non-git source {source.name!r}")
@@ -162,6 +163,7 @@ def resolve_git(
         path=skill_dir.resolve(),
         url=source.url,
         commit=commit,
+        ref=source.ref,
     )
 
 

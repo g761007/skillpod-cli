@@ -8,8 +8,9 @@ import yaml
 
 from skillpod.cli._output import emit, fail
 from skillpod.installer import uninstall
-from skillpod.lockfile import io as lockfile_io
+from skillpod.installer.paths import project_record_path
 from skillpod.manifest import load as load_manifest
+from skillpod.record import io as record_io
 
 
 def _drop_skill_from_manifest(manifest_path: Path, skill_name: str) -> bool:
@@ -38,11 +39,11 @@ def _drop_skill_from_manifest(manifest_path: Path, skill_name: str) -> bool:
     return dropped
 
 
-def _drop_lockfile_entry(lockfile_path: Path, skill_name: str) -> None:
-    lock = lockfile_io.read(lockfile_path)
-    if skill_name in lock.resolved:
-        del lock.resolved[skill_name]
-        lockfile_io.write(lockfile_path, lock)
+def _drop_record_entry(record_path: Path, skill_name: str) -> None:
+    installed = record_io.read(record_path)
+    if skill_name in installed.installed:
+        del installed.installed[skill_name]
+        record_io.write(record_path, installed)
 
 
 def run(
@@ -67,7 +68,7 @@ def run(
     try:
         _drop_skill_from_manifest(manifest_path, skill_name)
         uninstall(project_root, skill_name, manifest_path=manifest_path)
-        _drop_lockfile_entry(project_root / "skillfile.lock", skill_name)
+        _drop_record_entry(project_record_path(project_root), skill_name)
     except BaseException:
         manifest_path.write_text(snapshot, encoding="utf-8")
         raise

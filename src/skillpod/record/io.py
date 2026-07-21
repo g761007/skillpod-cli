@@ -1,6 +1,6 @@
 """Read and write `installed.yml` with deterministic ordering.
 
-Mirrors the shape of `skillpod.lockfile.io` so the switchover is mechanical,
+Deliberately shaped like the lockfile I/O it replaces,
 but a missing file is unremarkable here: a record is written *after* an
 install, so its absence simply means nothing has been installed yet.
 """

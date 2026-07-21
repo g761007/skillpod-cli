@@ -14,8 +14,7 @@ class InstallError(Exception):
 
 
 class InstallUserError(InstallError):
-    """User-actionable failure: manifest invalid, conflicting symlinks,
-    frozen-mode drift."""
+    """User-actionable failure: manifest invalid, conflicting symlinks."""
 
     exit_code = 1
 
@@ -31,10 +30,6 @@ class InstallConflict(InstallUserError):
     """Refusal to overwrite an unmanaged path during fan-out."""
 
 
-class FrozenDriftError(InstallUserError):
-    """Resolved commit or content sha256 disagrees with the lockfile."""
-
-
 class AdapterImportError(InstallUserError):
     """A custom adapter dotted path could not be imported or resolved.
 
@@ -44,7 +39,6 @@ class AdapterImportError(InstallUserError):
 
 __all__ = [
     "AdapterImportError",
-    "FrozenDriftError",
     "InstallConflict",
     "InstallError",
     "InstallSystemError",
