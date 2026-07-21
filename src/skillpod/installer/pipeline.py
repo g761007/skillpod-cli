@@ -59,6 +59,7 @@ from skillpod.record import io as record_io
 from skillpod.record.migrate import LEGACY_LOCKFILE, migrate_lockfile
 from skillpod.record.models import InstallRecord, SkillRecord
 from skillpod.registry import RegistryError, TrustError
+from skillpod.skillset.compose import compose_effective_skillset
 from skillpod.sources.errors import GitOperationError, SourceError
 from skillpod.sources.types import ResolvedSkill
 
@@ -80,6 +81,7 @@ class InstallReport:
     record_path: Path
     installed: list[InstalledSkill] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)
+    hidden_by_profile: list[str] = field(default_factory=list)
     satisfied_by_global: list[str] = field(default_factory=list)
     shadowed_by_global: dict[str, list[str]] = field(default_factory=dict)
     fanned_out_to: list[str] = field(default_factory=list)
@@ -332,6 +334,13 @@ def install(
         fanned_out_to=[a.name for a in active_agents],
     )
 
+    # Resolved before any mutation so a bad profile name fails fast.
+    visible = {
+        s.name
+        for s in compose_effective_skillset(manifest, project_root, home=home).skills
+    }
+    hidden_by_profile: list[str] = []
+
     install_mode = InstallMode(manifest.install.mode)
     fallback: list[str] = [str(f) for f in manifest.install.fallback]
     source_violation_reported: set[str] = set()
@@ -352,6 +361,22 @@ def install(
 
             # Snapshot source_dir mtimes for mutation detection.
             source_snapshot = _snapshot_source(skill_link)
+
+            # The active profile decides visibility, not presence: the skill is
+            # materialised either way, so switching back needs no download.
+            # Without this, `install` would re-link a skill the user had just
+            # hidden with `skillpod switch`.
+            if resolved.name not in visible:
+                hidden_by_profile.append(resolved.name)
+                report.installed.append(
+                    InstalledSkill(
+                        name=resolved.name,
+                        resolved=resolved,
+                        project_path=skill_link,
+                        sha256=sha256,
+                    )
+                )
+                continue
 
             for agent_entry in active_agents:
                 adapter = get_adapter(agent_entry.name)
@@ -382,6 +407,8 @@ def install(
                     sha256=sha256,
                 )
             )
+
+    report.hidden_by_profile = hidden_by_profile
 
     # Phase 3 — write the install record. Skipped skills keep the entry they
     # already had; nothing was re-resolved for them, so nothing changed.

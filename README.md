@@ -211,6 +211,26 @@ Skills with no recoverable origin, skills from local directories, and remotes
 that cannot be reached are reported and skipped — never fatal. One dead remote
 does not stop the rest.
 
+### …run only some of this project's skills right now
+
+```console
+$ skillpod switch minimal
+active profile set to 'minimal' (scope: project)
+  hidden: polish (still installed — switching back is instant)
+```
+
+Declare the subsets in `skillfile.yml`:
+
+```yaml
+profiles:
+  minimal:
+    skills: [audit]
+```
+
+Hidden skills stay in `.skillpod/skills/`, so switching back is offline and
+immediate. `install` and `sync` respect the active profile too — neither will
+put a hidden skill back.
+
 ### …switch my whole global setup at once
 
 Save what you have now, then move between named sets:

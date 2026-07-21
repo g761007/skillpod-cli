@@ -2176,11 +2176,18 @@ def test_status_shows_active_profile_from_state(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
-    proj = _project(tmp_path, "version: 1\nskills:\n  - audit\n")
-    runner.invoke(
+    # `dev` has to exist: switching now reconciles fan-out, so an unknown
+    # profile is rejected rather than silently written as a pointer that every
+    # later `resolve` would choke on.
+    proj = _project(
+        tmp_path,
+        "version: 1\nskills:\n  - audit\nprofiles:\n  dev:\n    skills: [audit]\n",
+    )
+    switched = runner.invoke(
         app,
         ["switch", "dev", "--scope", "project", "--manifest", str(proj / "skillfile.yml")],
     )
+    assert switched.exit_code == 0, switched.stdout
 
     result = runner.invoke(
         app,

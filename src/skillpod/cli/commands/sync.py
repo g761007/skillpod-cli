@@ -27,11 +27,16 @@ from skillpod.installer import (
 from skillpod.installer.errors import InstallUserError
 from skillpod.installer.expand import flatten
 from skillpod.installer.fanout import rollback_on_failure
-from skillpod.installer.paths import agent_skill_dir, project_record_path
+from skillpod.installer.paths import (
+    agent_skill_dir,
+    is_managed_fanout,
+    project_record_path,
+)
 from skillpod.installer.user_skills import discover_user_skills
 from skillpod.manifest import load as load_manifest
 from skillpod.manifest.models import SkillEntry, SourceEntry
 from skillpod.record import io as record_io
+from skillpod.skillset.compose import compose_effective_skillset
 from skillpod.sources.git import populate_cache
 from skillpod.sources.local import resolve_local
 
@@ -85,7 +90,17 @@ def _sync_impl(
             skills.append(SkillEntry(name=name))
             skill_names.add(name)
 
+    # The active profile decides what the agents see. Everything is still
+    # materialised — hiding a skill must not mean re-downloading it later —
+    # but an excluded skill's fan-out is removed rather than rebuilt, or sync
+    # would silently undo `skillpod switch`.
+    visible = {
+        s.name
+        for s in compose_effective_skillset(manifest, project_root).skills
+    }
+
     rebuilt: list[str] = []
+    hidden: list[str] = []
     with rollback_on_failure() as rollback:
         for skill in skills:
             rec = installed.get(skill.name)
@@ -105,6 +120,14 @@ def _sync_impl(
                 record=rollback,
             )
 
+            if skill.name not in visible:
+                for agent_name in active_agents:
+                    fanout = agent_skill_dir(project_root, agent_name, skill.name)
+                    if is_managed_fanout(fanout, project_root):
+                        fanout.unlink()
+                hidden.append(skill.name)
+                continue
+
             for agent_name in active_agents:
                 fanout = agent_skill_dir(project_root, agent_name, skill.name)
                 create_managed_fanout_symlink(fanout, skill_link, project_root, record=rollback)
@@ -113,6 +136,7 @@ def _sync_impl(
     return {
         "ok": True,
         "synced": rebuilt,
+        "hidden": hidden,
         "agents": active_agents,
     }
 
@@ -131,11 +155,18 @@ def run(
         lambda: _sync_impl(project_root, manifest_path, agent_filter=agent),
         json_output=json_output,
     )
-    human = (
-        f"Synced {len(payload['synced'])} skill(s) to: {', '.join(payload['agents']) or '(no agents)'}"
+    lines = [
+        f"Synced {len(payload['synced'])} skill(s) to: "
+        f"{', '.join(payload['agents']) or '(no agents)'}"
         if payload["synced"]
         else "Nothing to sync (no skills declared)."
-    )
+    ]
+    if payload["hidden"]:
+        lines.append(
+            f"Hidden by the active profile: {', '.join(payload['hidden'])} "
+            f"(still installed)"
+        )
+    human = "\n".join(lines)
     emit(payload, json_output=json_output, human=human)
 
 
