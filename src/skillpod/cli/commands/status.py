@@ -13,6 +13,7 @@ from skillpod.cli.commands.shell import ENV_DEPTH
 from skillpod.manifest.loader import ManifestError, load
 from skillpod.profile.io import list_global_profiles, list_project_profiles
 from skillpod.skillset.compose import compose_effective_skillset
+from skillpod.skillset.inventory import take_inventory
 from skillpod.state.active import read_active_profile
 
 
@@ -64,10 +65,25 @@ def run(
             {"active": True, "depth": shell_depth} if shell_active else {"active": False}
         )
 
+        inv = take_inventory(manifest, project_root, home=home)
+
         payload = {
             "project": project_name,
             "manifest": str(manifest_path),
             "skills": len(manifest.skills),
+            "inventory": {
+                "recommended": inv.recommended,
+                "satisfied": inv.satisfied,
+                "from_global": inv.from_global,
+                "from_project": inv.from_project,
+                "from_user": inv.from_user,
+                "missing": inv.missing,
+                "broken": inv.broken,
+                "detail": [
+                    {"name": s.name, "state": str(s.state), "detail": s.detail}
+                    for s in inv.skills
+                ],
+            },
             "activation": {
                 "mode": act.mode,
                 "inherit_global": act.inherit_global,
@@ -84,7 +100,33 @@ def run(
         human_lines = [
             f"project:    {project_name}",
             f"manifest:   {manifest_path}",
-            f"skills:     {len(manifest.skills)}",
+            "",
+            f"recommends: {inv.recommended} skill(s)",
+        ]
+        if inv.recommended:
+            sources = ", ".join(
+                part
+                for part, count in (
+                    (f"{inv.from_global} global", inv.from_global),
+                    (f"{inv.from_project} project", inv.from_project),
+                    (f"{inv.from_user} user", inv.from_user),
+                )
+                if count
+            )
+            human_lines.append(
+                f"  satisfied: {inv.satisfied}" + (f"   ({sources})" if sources else "")
+            )
+            if inv.missing:
+                human_lines.append(
+                    f"  missing:   {len(inv.missing)}   → skillpod install"
+                )
+            if inv.broken:
+                human_lines.append(
+                    f"  broken:    {len(inv.broken)}   → skillpod doctor"
+                )
+
+        human_lines += [
+            "",
             f"activation: {act.mode} / inherit_global={str(act.inherit_global).lower()}",
             "",
             "profiles:",

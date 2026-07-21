@@ -21,6 +21,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`skillpod status` is now the one place to see what you have.** It replaces
+  a five-command jigsaw (`status` + `list` + `global list` + `doctor` +
+  `global doctor`) for the question "is this project ready":
+
+  ```
+  recommends: 4 skill(s)
+    satisfied: 2   (1 global, 1 project)
+    missing:   1   → skillpod install
+    broken:    1   → skillpod doctor
+  ```
+
+  Every count names the command that fixes it. `broken` means "set up and now
+  inconsistent" — a skill that was never installed is `missing`, because
+  sending someone to `doctor` when they simply have not run `install` is a
+  dead end.
 - **`install.prefer_global`** (default `true`) — a skill you already have in
   `~/.skillpod/skills/` **satisfies the recommendation**: it is not downloaded,
   not materialised, and not fanned out into the project. `skillpod list` gains
