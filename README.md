@@ -391,9 +391,7 @@ record. That detects drift and corruption; it does not vet the content.
 | --- | --- | --- |
 | 0.1.0 – 0.5.x | shipped | manifest, installer, registry, adapters, `global` CLI |
 | 0.6.x | shipped | workspace profiles, activation policy, session shell, composition |
-| 0.7.0 | unreleased | profile model beta — composition in global apply, `schema --profile` |
-| 0.8.0 | in progress | **recommendation model** — `skillfile.lock` retired, `prefer_global`, `global update`, `status` dashboard |
-| 0.9.0 | planned | unified `link`/`unlink`, project profiles that actually reconcile fan-out |
+| 0.9.0 | shipped | **recommendation model** — `skillfile.lock` retired, `prefer_global`, `global update`, `status` dashboard, unified `link`/`unlink`, project profiles that reconcile fan-out |
 | 1.0.0 | planned | schema freeze |
 
 Full history: [`CHANGELOG.md`](./CHANGELOG.md).
