@@ -21,6 +21,7 @@ import yaml
 
 from skillpod.installer.global_apply import managed_global_skills
 from skillpod.installer.global_install import DEFAULT_GLOBAL_AGENTS
+from skillpod.installer.global_record import read_global_record
 from skillpod.installer.paths import (
     global_agent_skill_dir,
     global_profile_path,
@@ -51,7 +52,27 @@ def _recover_from_cache_path(target: Path) -> GlobalProfileSkill | None:
 
 
 def recover_source(name: str, home: Path | None = None) -> GlobalProfileSkill:
-    """Best-effort recover the source of an installed global skill."""
+    """Best-effort recover the source of an installed global skill.
+
+    The install record is consulted first and is authoritative when it knows
+    the skill — that is the whole reason it exists. Everything below it is
+    archaeology for skills installed before provenance was recorded.
+
+    A recorded ``ref`` is preferred over the ``commit`` it resolved to, so a
+    saved profile tracks the branch rather than freezing at whatever was
+    current on this machine. The commit is only used when no ref is known.
+    """
+    recorded = read_global_record(home).installed.get(name)
+    if recorded is not None and recorded.source:
+        if recorded.kind == "local":
+            return GlobalProfileSkill(name=name, source=recorded.source)
+        return GlobalProfileSkill(
+            name=name,
+            source=recorded.source,
+            ref=recorded.ref or recorded.commit,
+            subpath=recorded.subpath,
+        )
+
     skill_dir = global_skill_dir(name, home)
     if skill_dir.is_symlink():
         raw = os.readlink(skill_dir)
@@ -70,7 +91,9 @@ def recover_source(name: str, home: Path | None = None) -> GlobalProfileSkill:
             )
         # Local symlink: use the target directory as a local source.
         return GlobalProfileSkill(name=name, source=str(target))
-    # Real-directory copy with no recoverable origin → name only.
+    # Real-directory copy predating the record → genuinely unknown. Saying so
+    # is the honest answer; `skillpod global update` reports these rather than
+    # pretending it can refresh them.
     return GlobalProfileSkill(name=name)
 
 

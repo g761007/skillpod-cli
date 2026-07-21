@@ -194,21 +194,17 @@ def test_project_install_skips_skill_already_present_globally(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "install_global materialises ~/.skillpod/skills/<name> as a real "
-        "directory copy, and recover_source can only reconstruct a source from "
-        "a cache symlink — so provenance is lost for every current-version "
-        "install. This is also why `profile save` emits name-only profiles "
-        "that are not portable. Fixed in Phase 1 (~/.skillpod/installed.yml)."
-    ),
-)
 def test_global_install_keeps_source_recoverable(tmp_path: Path, isolated_home: Path) -> None:
-    """Without provenance there is nothing for `global update` to update."""
+    """Without provenance there is nothing for `global update` to update.
+
+    Fixed in Phase 1c: `install_global` writes `~/.skillpod/installed.yml`, and
+    `recover_source` consults it before falling back to symlink archaeology.
+    This is also what makes `profile save` emit portable profiles again.
+    """
     repo, _sha = make_root_skill_repo(tmp_path / "src", repo_name="audit")
     body = GlobalProfileBody.model_validate(
-        {"skills": [{"name": "audit", "source": f"file://{repo}"}]}
+        # as_uri() so the URL is valid on Windows too (file:///C:/...).
+        {"skills": [{"name": "audit", "source": repo.as_uri()}]}
     )
     plan = plan_apply(body, agents=["claude"], home=isolated_home)
     report = execute_apply(body, plan, force=True, home=isolated_home)
