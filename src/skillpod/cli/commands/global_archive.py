@@ -15,7 +15,7 @@ from typing import cast
 from skillpod.cli._output import emit, fail
 from skillpod.cli.commands.global_list import GlobalSkill, scan_global_skills
 from skillpod.installer.paths import global_install_root, global_skill_dir, is_managed_global_fanout
-from skillpod.lockfile.integrity import hash_directory
+from skillpod.integrity import hash_directory
 
 
 class _ArchiveError(Exception):

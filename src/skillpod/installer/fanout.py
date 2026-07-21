@@ -26,7 +26,7 @@ from skillpod.installer.adapter import Adapter, InstallMode
 from skillpod.installer.adapter_default import IdentityAdapter
 from skillpod.installer.errors import InstallConflict, InstallSystemError
 from skillpod.installer.paths import is_managed_fanout
-from skillpod.lockfile.integrity import hash_directory
+from skillpod.integrity import hash_directory
 
 logger = logging.getLogger(__name__)
 

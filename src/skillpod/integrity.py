@@ -1,7 +1,7 @@
 """Compute deterministic content digests for materialised skill directories.
 
-The digest must be stable across runs and machines so that
-`add-skillpod-mvp-install`'s frozen-mode check is reproducible. We hash:
+The digest must be stable across runs and machines so callers can compare a
+materialised directory against a recorded digest. We hash:
 
 1. The relative POSIX path of every regular file under `root` (sorted).
 2. The byte contents of each file.
