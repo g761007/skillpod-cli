@@ -277,6 +277,22 @@ def materialise_agent_link(
         ) from exc
 
 
+def agents_with_skill(skill_name: str, home: Path | None = None) -> list[str]:
+    """Agents that currently have a *managed* fan-out for ``skill_name``.
+
+    `global update` re-materialises a skill in place and must put it back only
+    where it already was — silently adding it to every agent would be a
+    behaviour change the user did not ask for.
+    """
+    return [
+        agent
+        for agent in DEFAULT_GLOBAL_AGENTS
+        if is_managed_global_fanout(
+            global_agent_skill_dir(agent, skill_name, home), skill_name, home
+        )
+    ]
+
+
 def uninstall_global(
     skill_name: str,
     *,
@@ -347,6 +363,7 @@ __all__ = [
     "DEFAULT_GLOBAL_AGENTS",
     "GlobalInstallReport",
     "GlobalInstalledSkill",
+    "agents_with_skill",
     "install_global",
     "materialise_agent_link",
     "uninstall_global",

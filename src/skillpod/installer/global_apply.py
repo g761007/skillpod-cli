@@ -156,7 +156,7 @@ def _download_skill(skill: GlobalProfileSkill, agents: list[str], *, force: bool
         spec = replace(spec, subpath=skill.subpath)
 
     # Fetch + discover so we can select the named skill out of the source.
-    spec, root, _commit = _fetch_source(spec)
+    spec, root, _commit = fetch_source(spec)
     discovered = discover_skills(root, root_name=spec.derived_name)
     match = next((d for d in discovered if d.name == skill.name), None)
     if match is None:
@@ -233,7 +233,7 @@ def execute_apply(
     return report
 
 
-def _fetch_source(spec: SourceSpec) -> tuple[SourceSpec, Path, str]:
+def fetch_source(spec: SourceSpec) -> tuple[SourceSpec, Path, str]:
     """Materialise ``spec`` on disk; return ``(resolved_spec, root, commit)``."""
     if spec.kind == "git":
         if spec.ref is None:
@@ -257,6 +257,7 @@ __all__ = [
     "ApplyPlan",
     "ApplyReport",
     "execute_apply",
+    "fetch_source",
     "managed_global_skills",
     "plan_apply",
 ]
