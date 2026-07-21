@@ -8,7 +8,8 @@ from typing import TypedDict
 
 from skillpod.cli._output import emit, fail
 from skillpod.cli.commands.global_list import known_global_roots, scan_global_skills
-from skillpod.lockfile import io as lockfile_io
+from skillpod.installer.paths import project_record_path
+from skillpod.record import io as record_io
 
 
 class GlobalFinding(TypedDict, total=False):
@@ -60,16 +61,21 @@ def run(*, project_root: Path, manifest_path: Path, json_output: bool) -> None:
             )
 
     try:
-        lock = lockfile_io.read(project_root / "skillfile.lock")
+        installed = record_io.read(project_record_path(project_root)).installed
     except Exception as exc:
         raise fail(str(exc), code=2, json_output=json_output) from exc
 
-    for name in sorted(set(by_name) & set(lock.resolved)):
+    # Overlap is informational, not a fault. A project may legitimately pin its
+    # own copy of a skill the user also has globally; Phase 3 turns this into
+    # "satisfied by global" once `install.prefer_global` exists.
+    for name in sorted(set(by_name) & set(installed)):
         findings.append(
             GlobalFinding(
-                severity="error",
-                code="global-local-conflict",
-                message=f"global skill '{name}' also exists in the current project lockfile",
+                severity="info",
+                code="global-local-overlap",
+                message=(
+                    f"global skill '{name}' is also installed in the current project"
+                ),
                 name=name,
                 paths=by_name[name],
             )

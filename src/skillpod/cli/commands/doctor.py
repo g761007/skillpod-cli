@@ -1,8 +1,10 @@
-"""`skillpod doctor` — verify manifest/lockfile/symlink consistency.
+"""`skillpod doctor` — verify manifest/record/symlink consistency.
 
 Checks performed (in order):
-1. Every manifest skill (non-local-sourced) exists in skillfile.lock.
-2. Every lockfile entry has a materialised directory at .skillpod/skills/<name>/.
+1. Every skill the manifest recommends is installed (warning if not — a
+   recommendation the developer has not acted on is not a broken state).
+2. Every skill in the install record still has its materialised directory at
+   .skillpod/skills/<name>/ (error — record and disk disagree).
 3. Every .<agent>/skills/<name> symlink declared by the manifest resolves into
    .skillpod/skills/.
 4. No directory under .skillpod/skills/ is absent from the manifest (orphan).
@@ -22,11 +24,16 @@ import yaml
 
 from skillpod.cli._output import emit, fail
 from skillpod.installer.expand import flatten
-from skillpod.installer.paths import agent_skill_dir, install_root, is_managed_fanout
+from skillpod.installer.paths import (
+    agent_skill_dir,
+    install_root,
+    is_managed_fanout,
+    project_record_path,
+)
 from skillpod.installer.user_skills import discover_user_skills
-from skillpod.lockfile import io as lockfile_io
 from skillpod.manifest import load as load_manifest
 from skillpod.manifest.models import SkillEntry, Skillfile
+from skillpod.record import io as record_io
 
 
 class Finding(TypedDict, total=False):
@@ -124,9 +131,8 @@ def run(
     except Exception as exc:
         raise fail(str(exc), code=2, json_output=json_output) from exc
 
-    lockfile_path = project_root / "skillfile.lock"
     try:
-        lock = lockfile_io.read(lockfile_path)
+        installed = record_io.read(project_record_path(project_root)).installed
     except Exception as exc:
         raise fail(str(exc), code=2, json_output=json_output) from exc
 
@@ -141,55 +147,54 @@ def run(
             skills.append(SkillEntry(name=name))
             skill_names.add(name)
 
-    # Determine which skills are local-sourced (not lockable).
-    source_map = {s.name: s for s in manifest.sources}
     manifest_skill_names: set[str] = set()
 
+    # Check 1: every recommended skill is actually installed.
+    #
+    # Not being installed is a *warning*, not an error: skillfile.yml
+    # recommends, it does not compel. A freshly cloned project legitimately
+    # has none of them yet, and `skillpod install` is the whole fix.
     for skill in skills:
         manifest_skill_names.add(skill.name)
-
-        # Check 1: every non-local manifest skill has a lockfile entry.
-        # A skill is considered "local" when its declared source is explicitly
-        # typed as local, OR when it has no lockfile entry but IS materialised
-        # (meaning it was installed via a local source without being locked).
-        is_local = False
         if skill.name in user_skills:
-            is_local = True
-        elif skill.source is not None:
-            src = source_map.get(skill.source)
-            if src is not None and src.type == "local":
-                is_local = True
-        else:
-            # Implicit source: if the skill is materialised but not in the
-            # lockfile it must be local-resolved (local sources are never locked).
-            materialised = skills_root / skill.name
-            if materialised.exists() and skill.name not in lock.resolved:
-                is_local = True
-
-        if not is_local and skill.name not in lock.resolved:
+            continue  # lives in .skillpod/user_skills, nothing to install
+        if not (skills_root / skill.name).exists():
             findings.append(
                 Finding(
-                    severity="error",
-                    code="missing-lock-entry",
-                    message=f"skill '{skill.name}' is in the manifest but has no lockfile entry",
+                    severity="warning",
+                    code="not-installed",
+                    message=(
+                        f"skill '{skill.name}' is recommended by the manifest but "
+                        f"not installed — run `skillpod install`"
+                    ),
                 )
             )
 
-    # Check 2: every lockfile entry has a materialised directory.
-    for name in lock.resolved:
+    # Check 2: every recorded skill still has its materialised directory.
+    # Here the record and the disk genuinely disagree, which *is* an error.
+    for name in installed:
         skill_dir = skills_root / name
         if not skill_dir.exists():
             findings.append(
                 Finding(
                     severity="error",
                     code="missing-materialised-dir",
-                    message=f"lockfile entry '{name}' has no materialised directory",
+                    message=(
+                        f"'{name}' is recorded as installed but its directory is gone"
+                    ),
                     path=str(skill_dir),
                 )
             )
 
-    # Check 3: every declared agent fan-out symlink resolves into .skillpod/skills/.
+    # Check 3: every *installed* skill's fan-out resolves into .skillpod/skills/.
+    #
+    # Skills that are not installed are skipped: they were already reported by
+    # check 1, and a missing fan-out is the expected consequence, not a second
+    # independent fault. Reporting both would make a freshly cloned project
+    # fail `doctor` with errors when all it needs is `skillpod install`.
     for skill in skills:
+        if not (skills_root / skill.name).exists():
+            continue
         for agent_entry in manifest.agents:
             agent = agent_entry.name
             link = agent_skill_dir(project_root, agent, skill.name)

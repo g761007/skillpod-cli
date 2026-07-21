@@ -284,7 +284,7 @@ def list_(
     )
 
 
-@app.command(help="Re-create fan-out entries from skillfile.lock without re-resolving.")
+@app.command(help="Re-create fan-out entries from the install record without re-resolving.")
 def sync(
     manifest: ManifestOpt = Path("skillfile.yml"),
     json: JsonOpt = False,

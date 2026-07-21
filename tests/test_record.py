@@ -16,6 +16,7 @@ import yaml
 from skillpod import record
 from skillpod.installer.paths import global_record_path, project_record_path
 from skillpod.record import InstallRecord, RecordError, SkillRecord
+from skillpod.record.migrate import migrate_lockfile
 
 _COMMIT = "a" * 40
 _SHA = "b" * 64
@@ -176,3 +177,68 @@ def test_record_paths_live_under_skillpod_dir(tmp_path: Path) -> None:
     that is what keeps them off every developer's commit."""
     assert project_record_path(tmp_path) == tmp_path / ".skillpod" / "installed.yml"
     assert global_record_path(tmp_path) == tmp_path / ".skillpod" / "installed.yml"
+
+
+# ---- migration from the retired lockfile -----------------------------------
+
+
+def _legacy_lock(project_root: Path, body: str) -> None:
+    (project_root / "skillfile.lock").write_text(body, encoding="utf-8")
+
+
+def test_migrate_seeds_record_from_lockfile(tmp_path: Path) -> None:
+    """An established project must not re-download everything on upgrade."""
+    _legacy_lock(
+        tmp_path,
+        f"version: 1\nresolved:\n  audit:\n    source: git\n"
+        f"    url: https://example.invalid/r.git\n"
+        f"    commit: {_COMMIT}\n    sha256: {_SHA}\n",
+    )
+    migrated = migrate_lockfile(tmp_path)
+    assert migrated is not None
+    entry = migrated.installed["audit"]
+    assert (entry.kind, entry.source, entry.commit) == (
+        "git",
+        "https://example.invalid/r.git",
+        _COMMIT,
+    )
+    # The old format never recorded which branch was followed, so neither does
+    # the migrated entry — `update` falls back to the manifest's ref.
+    assert entry.ref is None
+
+
+def test_migrate_never_deletes_the_lockfile(tmp_path: Path) -> None:
+    """It is a committed file the user owns; removing it is their call."""
+    _legacy_lock(
+        tmp_path,
+        f"version: 1\nresolved:\n  audit:\n    source: git\n"
+        f"    url: https://example.invalid/r.git\n"
+        f"    commit: {_COMMIT}\n    sha256: {_SHA}\n",
+    )
+    migrate_lockfile(tmp_path)
+    assert (tmp_path / "skillfile.lock").is_file()
+
+
+def test_migrate_returns_none_without_a_lockfile(tmp_path: Path) -> None:
+    assert migrate_lockfile(tmp_path) is None
+
+
+def test_migrate_tolerates_a_malformed_lockfile(tmp_path: Path) -> None:
+    """A broken legacy file is not worth failing an install over — the record
+    is rebuilt from scratch on the next resolve anyway."""
+    _legacy_lock(tmp_path, "resolved: [not, a, mapping]\n")
+    assert migrate_lockfile(tmp_path) is None
+
+
+def test_migrate_skips_entries_that_cannot_be_trusted(tmp_path: Path) -> None:
+    """Partial recovery beats refusing to migrate at all."""
+    _legacy_lock(
+        tmp_path,
+        f"version: 1\nresolved:\n"
+        f"  good:\n    url: https://example.invalid/r.git\n    commit: {_COMMIT}\n"
+        f"  truncated-commit:\n    url: https://example.invalid/r.git\n    commit: abc123\n"
+        f"  no-url:\n    commit: {_COMMIT}\n",
+    )
+    migrated = migrate_lockfile(tmp_path)
+    assert migrated is not None
+    assert set(migrated.installed) == {"good"}

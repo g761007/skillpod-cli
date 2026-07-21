@@ -14,12 +14,28 @@ from typing import Any
 import httpx
 import pytest
 import respx
+import yaml
 from typer.testing import CliRunner
 
 from skillpod.cli import app
 from tests._git_fixtures import make_skill_repo
 
 _REGISTRY_BASE = "https://registry.test"
+
+
+def _write_record(project_root: Path, entries: dict[str, dict[str, str]]) -> None:
+    """Author `.skillpod/installed.yml` directly.
+
+    Lets a test set up a pre-existing install state without running a real
+    install — the equivalent of the hand-written `skillfile.lock` fixtures
+    these tests used before.
+    """
+    path = project_root / ".skillpod" / "installed.yml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        yaml.safe_dump({"version": 1, "installed": entries}, sort_keys=False),
+        encoding="utf-8",
+    )
 
 
 @pytest.fixture
@@ -286,10 +302,17 @@ def test_list_json_output_is_valid_json(runner: CliRunner, tmp_path: Path) -> No
 # ---- sync ------------------------------------------------------------------
 
 
-def test_sync_recreates_from_lockfile_idempotently(
+def test_sync_recreates_from_record_idempotently(
     runner: CliRunner, tmp_path: Path
 ) -> None:
-    """Scenario: `sync` is idempotent against the lockfile."""
+    """Scenario: `sync` rebuilds materialisation and fan-out from the record.
+
+    Only `.skillpod/skills/` and the fan-out directories are wiped — the
+    record at `.skillpod/installed.yml` is what sync reads to rebuild them.
+    Deleting the whole `.skillpod/` tree also deletes the record, and at that
+    point there is nothing left to sync *from*: `skillpod install` is the
+    command for that, not `sync`.
+    """
     repo_path, _sha = make_skill_repo(tmp_path / "git-side")
     proj = _project(
         tmp_path,
@@ -312,12 +335,13 @@ def test_sync_recreates_from_lockfile_idempotently(
     )
     assert install_result.exit_code == 0, install_result.stdout + install_result.stderr
 
-    # Wipe the materialised tree but keep the lockfile.
-    for path in [".skillpod", ".claude", ".codex"]:
+    # Wipe the materialised tree and fan-out, but keep the install record.
+    for path in [".skillpod/skills", ".claude", ".codex"]:
         full = proj / path
         if full.exists():
             import shutil
             shutil.rmtree(full)
+    assert (proj / ".skillpod" / "installed.yml").is_file()
 
     sync_result = runner.invoke(
         app, ["sync", "--manifest", str(proj / "skillfile.yml")]
@@ -501,26 +525,16 @@ def test_search_marks_policy_failing_row(
 
 
 def test_outdated_no_drift(runner: CliRunner, tmp_path: Path) -> None:
-    """outdated: same commit in lock and HEAD → drift=no."""
+    """outdated: recorded commit == HEAD → drift=no."""
     repo_path, sha = make_skill_repo(tmp_path / "git-side")
     proj = tmp_path / "project"
     proj.mkdir()
     (proj / "skillfile.yml").write_text(
         "version: 1\nagents: [claude]\nskills: []\n", encoding="utf-8"
     )
-    # Write a lockfile with the exact current HEAD SHA.
-    fake_sha256 = "a" * 64
-    (proj / "skillfile.lock").write_text(
-        textwrap.dedent(f"""
-            version: 1
-            resolved:
-              audit:
-                source: git
-                url: {repo_path}
-                commit: {sha}
-                sha256: {fake_sha256}
-        """).lstrip(),
-        encoding="utf-8",
+    _write_record(
+        proj,
+        {"audit": {"kind": "git", "source": str(repo_path), "ref": "main", "commit": sha}},
     )
     result = runner.invoke(app, ["outdated", "--manifest", str(proj / "skillfile.yml")])
     assert result.exit_code == 0
@@ -528,27 +542,24 @@ def test_outdated_no_drift(runner: CliRunner, tmp_path: Path) -> None:
 
 
 def test_outdated_with_drift(runner: CliRunner, tmp_path: Path) -> None:
-    """outdated: lockfile commit != HEAD → drift=yes."""
+    """outdated: recorded commit != HEAD → drift=yes."""
     repo_path, _sha = make_skill_repo(tmp_path / "git-side")
     proj = tmp_path / "project"
     proj.mkdir()
     (proj / "skillfile.yml").write_text(
         "version: 1\nagents: [claude]\nskills: []\n", encoding="utf-8"
     )
-    # Use a different (but valid-format) commit in the lockfile.
-    locked_sha = "deadbeef" * 5  # 40 hex chars
-    fake_sha256 = "a" * 64
-    (proj / "skillfile.lock").write_text(
-        textwrap.dedent(f"""
-            version: 1
-            resolved:
-              audit:
-                source: git
-                url: {repo_path}
-                commit: {locked_sha}
-                sha256: {fake_sha256}
-        """).lstrip(),
-        encoding="utf-8",
+    stale_sha = "deadbeef" * 5  # 40 hex chars, never the real commit
+    _write_record(
+        proj,
+        {
+            "audit": {
+                "kind": "git",
+                "source": str(repo_path),
+                "ref": "main",
+                "commit": stale_sha,
+            }
+        },
     )
     result = runner.invoke(app, ["outdated", "--manifest", str(proj / "skillfile.yml")])
     assert result.exit_code == 0
@@ -562,20 +573,16 @@ def test_outdated_network_failure_exits_2(runner: CliRunner, tmp_path: Path) -> 
     (proj / "skillfile.yml").write_text(
         "version: 1\nagents: []\nskills: []\n", encoding="utf-8"
     )
-    fake_sha256 = "b" * 64
-    fake_sha = "cafebabe" * 5
     # Use a URL that git ls-remote will definitely fail on.
-    (proj / "skillfile.lock").write_text(
-        textwrap.dedent(f"""
-            version: 1
-            resolved:
-              audit:
-                source: git
-                url: https://this-host-does-not-exist.invalid/repo.git
-                commit: {fake_sha}
-                sha256: {fake_sha256}
-        """).lstrip(),
-        encoding="utf-8",
+    _write_record(
+        proj,
+        {
+            "audit": {
+                "kind": "git",
+                "source": "https://this-host-does-not-exist.invalid/repo.git",
+                "commit": "cafebabe" * 5,
+            }
+        },
     )
     result = runner.invoke(app, ["outdated", "--manifest", str(proj / "skillfile.yml")])
     assert result.exit_code == 2
@@ -615,15 +622,20 @@ def test_update_single_skill(runner: CliRunner, tmp_path: Path) -> None:
     )
     assert result.exit_code == 0, result.stdout + result.stderr
 
-    from skillpod.lockfile import io as lock_io
-    lock = lock_io.read(proj / "skillfile.lock")
+    from skillpod.installer.paths import project_record_path
+    from skillpod.record import io as record_io
+    installed = record_io.read(project_record_path(proj)).installed
     # audit should now have the fresh SHA from the registry.
-    assert lock.resolved["audit"].commit == sha
+    assert installed["audit"].commit == sha
 
 
 @respx.mock
 def test_update_aborts_on_trust_failure(runner: CliRunner, tmp_path: Path) -> None:
-    """update: TrustError → exit 1, lockfile unchanged."""
+    """update: TrustError → exit 1, install record unchanged.
+
+    The record is written only after materialisation succeeds, so a failed
+    update cannot leave it half-written — no snapshot/restore needed.
+    """
     from tests._git_fixtures import make_skill_repo as _make
     repo_path, sha = _make(tmp_path / "git-side")
     respx.get(f"{_REGISTRY_BASE}/api/skills/audit").mock(
@@ -650,27 +662,28 @@ def test_update_aborts_on_trust_failure(runner: CliRunner, tmp_path: Path) -> No
         "version: 1\nagents: []\nskills: [audit]\n", encoding="utf-8"
     )
     old_sha = "a" * 40
-    fake_sha256 = "e" * 64
-    lock_text = textwrap.dedent(f"""
-        version: 1
-        resolved:
-          audit:
-            source: git
-            url: {repo_path}
-            commit: {old_sha}
-            sha256: {fake_sha256}
-    """).lstrip()
-    (proj / "skillfile.lock").write_text(lock_text, encoding="utf-8")
+    _write_record(
+        proj,
+        {
+            "audit": {
+                "kind": "git",
+                "source": str(repo_path),
+                "ref": "main",
+                "commit": old_sha,
+            }
+        },
+    )
 
     result = runner.invoke(
         app, ["update", "audit", "--manifest", str(proj / "skillfile.yml")]
     )
     assert result.exit_code == 1
 
-    # Lockfile restored to original.
-    from skillpod.lockfile import io as lock_io
-    lock = lock_io.read(proj / "skillfile.lock")
-    assert lock.resolved["audit"].commit == old_sha
+    # Record still describes the previous install.
+    from skillpod.installer.paths import project_record_path
+    from skillpod.record import io as record_io
+    installed = record_io.read(project_record_path(proj)).installed
+    assert installed["audit"].commit == old_sha
 
 
 # ---- doctor -----------------------------------------------------------------
@@ -746,44 +759,67 @@ def test_doctor_orphan_dir(runner: CliRunner, tmp_path: Path) -> None:
     assert "orphan" in result.stdout.lower() or "legacy" in result.stdout.lower()
 
 
-def test_doctor_lockfile_drift(runner: CliRunner, tmp_path: Path) -> None:
-    """doctor: manifest skill not in lockfile → error finding, exit 1."""
-    pool = tmp_path / "pool"
-    (pool / "audit").mkdir(parents=True)
-    _project(
-        tmp_path,
-        textwrap.dedent(f"""
-            version: 1
-            agents: []
-            sources:
-              - name: local
-                type: local
-                path: {pool}
-            skills: [audit]
-        """),
-    )
-    # Do NOT install; lockfile will be missing the entry.
-    # (local-sourced skills don't get lock entries, so we need a non-local manifest.)
-    # For this test use a git URL that happens to be the pool - doesn't matter because
-    # we just want to check that a skill without source=local AND without a lock entry
-    # triggers an error.  Use a manifest with no sources (registry fallback).
-    proj2 = tmp_path / "project2"
-    proj2.mkdir()
-    (proj2 / "skillfile.yml").write_text(
+def test_doctor_warns_but_does_not_fail_when_a_skill_is_not_installed(
+    runner: CliRunner, tmp_path: Path
+) -> None:
+    """A recommendation nobody has acted on yet is not a broken project.
+
+    Someone who has just cloned a repo has none of its recommended skills.
+    `doctor` should tell them to run `skillpod install`, not exit 1 at them.
+    This used to be a `missing-lock-entry` error.
+    """
+    proj = tmp_path / "project"
+    proj.mkdir()
+    (proj / "skillfile.yml").write_text(
         "version: 1\nagents: []\nskills: [audit]\n", encoding="utf-8"
     )
-    # Empty lockfile (no resolved entries).
-    (proj2 / "skillfile.lock").write_text("version: 1\nresolved: {}\n", encoding="utf-8")
-    result = runner.invoke(app, ["doctor", "--manifest", str(proj2 / "skillfile.yml")])
+
+    result = runner.invoke(
+        app, ["doctor", "--json", "--manifest", str(proj / "skillfile.yml")]
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is True
+    [finding] = [f for f in payload["findings"] if f["code"] == "not-installed"]
+    assert finding["severity"] == "warning"
+    assert "skillpod install" in finding["message"]
+
+
+def test_doctor_errors_when_a_recorded_skill_vanished(
+    runner: CliRunner, tmp_path: Path
+) -> None:
+    """Record and disk disagreeing *is* a fault, and still exits 1."""
+    proj = tmp_path / "project"
+    proj.mkdir()
+    (proj / "skillfile.yml").write_text(
+        "version: 1\nagents: []\nskills: [audit]\n", encoding="utf-8"
+    )
+    _write_record(
+        proj,
+        {
+            "audit": {
+                "kind": "git",
+                "source": "https://example.invalid/audit.git",
+                "commit": "a" * 40,
+            }
+        },
+    )
+
+    result = runner.invoke(
+        app, ["doctor", "--json", "--manifest", str(proj / "skillfile.yml")]
+    )
+
     assert result.exit_code == 1
-    assert "error" in result.stdout.lower() or "lockfile" in result.stdout.lower()
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is False
+    assert any(f["code"] == "missing-materialised-dir" for f in payload["findings"])
 
 
 def test_doctor_schema_hints_flag_human_mode(
     runner: CliRunner, tmp_path: Path
 ) -> None:
     proj = _project(tmp_path, "version: 1\nskills: []\n")
-    (proj / "skillfile.lock").write_text("version: 1\nresolved: {}\n", encoding="utf-8")
 
     result = runner.invoke(
         app,
@@ -802,7 +838,6 @@ def test_doctor_schema_hints_flag_json_mode(
     runner: CliRunner, tmp_path: Path
 ) -> None:
     proj = _project(tmp_path, "version: 1\nskills: []\n")
-    (proj / "skillfile.lock").write_text("version: 1\nresolved: {}\n", encoding="utf-8")
 
     result = runner.invoke(
         app,
@@ -1105,35 +1140,42 @@ def test_global_doctor_flags_duplicate(
     assert any(f["code"] == "duplicate-global-skill" for f in payload["findings"])
 
 
-def test_global_doctor_flags_global_local_conflict(
+def test_global_doctor_reports_global_local_overlap_without_failing(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Having a skill both globally and in a project is worth mentioning, not
+    worth failing over.
+
+    Under the recommendation model the project only suggests; a user who also
+    keeps the skill globally has not done anything wrong. This used to be a
+    hard error with exit 1.
+    """
     monkeypatch.setenv("HOME", str(tmp_path))
     (tmp_path / ".claude" / "skills" / "audit").mkdir(parents=True)
     proj = tmp_path / "project"
     proj.mkdir()
     (proj / "skillfile.yml").write_text("version: 1\nskills: []\n", encoding="utf-8")
-    (proj / "skillfile.lock").write_text(
-        textwrap.dedent("""
-            version: 1
-            resolved:
-              audit:
-                source: git
-                url: https://example.invalid/audit.git
-                commit: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-                sha256: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-        """).lstrip(),
-        encoding="utf-8",
+    _write_record(
+        proj,
+        {
+            "audit": {
+                "kind": "git",
+                "source": "https://example.invalid/audit.git",
+                "commit": "a" * 40,
+            }
+        },
     )
 
     result = runner.invoke(
         app, ["global", "doctor", "--json", "--manifest", str(proj / "skillfile.yml")]
     )
 
-    assert result.exit_code == 1
+    assert result.exit_code == 0
     payload = json.loads(result.stdout)
-    assert payload["ok"] is False
-    assert any(f["code"] == "global-local-conflict" for f in payload["findings"])
+    assert payload["ok"] is True
+    overlap = [f for f in payload["findings"] if f["code"] == "global-local-overlap"]
+    assert len(overlap) == 1
+    assert overlap[0]["severity"] == "info"
 
 
 def test_global_doctor_flags_broken_symlink(

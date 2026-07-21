@@ -7,8 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- **`skillfile.lock` is gone.** It existed to force byte-identical skills
+  across a team, which is the opposite of what `skillfile.yml` now means: a
+  **recommendation**, not a contract. Each developer decides what to run.
+  See `plans/2026-07-21-recommendation-model.md`.
+
+  On the first `install` after upgrading, an existing `skillfile.lock` is read
+  once to seed the new record so nothing is re-downloaded. The file itself is
+  **never deleted** — it is committed and yours to remove (`git rm
+  skillfile.lock`).
+
 ### Added
 
+- **Install records** — `.skillpod/installed.yml` (project) and
+  `~/.skillpod/installed.yml` (global) record what is materialised on *this*
+  machine. Both live under `.skillpod/`, which `skillpod init` already
+  gitignores, so a record never lands in a commit. Unlike the lockfile they
+  describe rather than prescribe, which is why they can express two things it
+  could not: **local sources** (nothing to pin, but definitely installed) and
+  **`kind: unknown`** (provenance that could not be recovered).
 - **Profile composition now works for global apply** —
   `skillpod switch dev+reviewer --scope global` unions the operands'
   source-bearing skills, downloads what is missing, and fans out the combined
@@ -24,6 +43,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`install` no longer chases upstream, and no longer replays a pin.**
+  Resolution follows the manifest — the source's `ref`, or an authored
+  `skills[].version`. A skill that is already installed and still matches what
+  the manifest declares is skipped without touching the network, so a repeat
+  `install` is offline and instant. Asking for newer content is now
+  exclusively `skillpod update`, which re-resolves and re-materialises.
+- **`skillpod doctor`: "recommended but not installed" is a warning, not an
+  error.** A freshly cloned project has none of its recommended skills yet;
+  that is not a broken state, and `doctor` says to run `skillpod install`
+  instead of exiting 1. Record and disk *disagreeing* is still an error.
+- **`skillpod global doctor`: overlap with a project is informational.**
+  `global-local-conflict` (error, exit 1) becomes `global-local-overlap`
+  (info, exit 0) — keeping a skill both globally and in a project is a
+  legitimate choice, not a fault.
+- `skillpod outdated` compares recorded commits against upstream and skips
+  entries with nothing to compare (local sources, unknown provenance) rather
+  than reporting them as drifted.
 - **Profile composition is no longer experimental.** The one-time stderr
   warning and the `SKILLPOD_DISABLE_EXPERIMENTAL_WARNING` suppressor are
   removed; composition semantics (union, left-wins dedup, session + global
@@ -32,6 +68,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Internal
 
+- New `skillpod.record` package (models, I/O, legacy-lockfile migration);
+  `skillpod.lockfile` deleted. `hash_directory` moved to `skillpod.integrity`
+  — it is used by fan-out and global install and never belonged to the
+  lockfile. `FrozenDriftError` and the "local sources are not lockable"
+  special case are both gone.
+- `ResolvedSkill` gains `ref`, so a record can distinguish "tracking main"
+  from "pinned to this SHA".
 - New `skillpod.profile.compose.compose_global_bodies` — a source-bearing union
   of multiple global profiles with left-wins conflict handling.
 - 11 new tests (global compose union + left-wins conflict + remote-operand

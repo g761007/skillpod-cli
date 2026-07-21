@@ -16,9 +16,9 @@ from typing import Any, TypeVar
 import typer
 
 from skillpod.installer.errors import InstallSystemError, InstallUserError
-from skillpod.lockfile.io import LockfileError
 from skillpod.manifest.loader import ManifestError
 from skillpod.profile.errors import ProfileError
+from skillpod.record.io import RecordError
 from skillpod.registry.errors import RegistryError
 from skillpod.sources.errors import GitOperationError, SourceError
 
@@ -50,7 +50,7 @@ def run_with_exit_codes(
     """Translate known exceptions to the documented exit codes."""
     try:
         return fn()
-    except (ManifestError, LockfileError, InstallUserError, ProfileError, SourceError) as exc:
+    except (ManifestError, RecordError, InstallUserError, ProfileError, SourceError) as exc:
         raise fail(str(exc), code=1, json_output=json_output) from exc
     except (
         InstallSystemError,

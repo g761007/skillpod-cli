@@ -5,7 +5,6 @@ from skillpod.installer.adapter_default import IdentityAdapter
 from skillpod.installer.adapter_registry import get_adapter, register_adapter, reset_registry
 from skillpod.installer.errors import (
     AdapterImportError,
-    FrozenDriftError,
     InstallConflict,
     InstallError,
     InstallSystemError,
@@ -45,7 +44,6 @@ __all__ = [
     "USER_SKILLS_DIR",
     "Adapter",
     "AdapterImportError",
-    "FrozenDriftError",
     "IdentityAdapter",
     "InstallConflict",
     "InstallError",

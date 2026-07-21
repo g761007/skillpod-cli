@@ -29,7 +29,8 @@ Useful commands:
 ```
 src/skillpod/
   manifest/        skillfile.yml schema (pydantic v2)
-  lockfile/        skillfile.lock pinned to git commits
+  record/          installed.yml — what is materialised, per scope
+  integrity.py     deterministic content digests
   sources/         git / github / skills.sh resolvers
   registry/        skills.sh discovery
   installer/       materialise into .skillpod/ + adapter fan-out

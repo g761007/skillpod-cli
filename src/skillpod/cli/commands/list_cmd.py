@@ -1,4 +1,4 @@
-"""`skillpod list` — show installed skills, sources, and lockfile commits."""
+"""`skillpod list` — show declared skills and what is actually installed."""
 
 from __future__ import annotations
 
@@ -6,10 +6,11 @@ from pathlib import Path
 
 from skillpod.cli._output import emit, fail
 from skillpod.installer.expand import flatten
+from skillpod.installer.paths import project_record_path
 from skillpod.installer.user_skills import discover_user_skills
-from skillpod.lockfile import io as lockfile_io
 from skillpod.manifest import load as load_manifest
 from skillpod.manifest.models import SkillEntry
+from skillpod.record import io as record_io
 
 
 def run(*, project_root: Path, manifest_path: Path, json_output: bool) -> None:
@@ -17,7 +18,7 @@ def run(*, project_root: Path, manifest_path: Path, json_output: bool) -> None:
         raise fail(f"{manifest_path} not found", code=1, json_output=json_output)
 
     manifest = load_manifest(manifest_path)
-    lock = lockfile_io.read(project_root / "skillfile.lock")
+    installed = record_io.read(project_record_path(project_root)).installed
 
     skills = flatten(manifest)
     known = {skill.name for skill in skills}
@@ -27,13 +28,14 @@ def run(*, project_root: Path, manifest_path: Path, json_output: bool) -> None:
 
     rows: list[dict[str, str | None]] = []
     for skill in skills:
-        locked = lock.resolved.get(skill.name)
+        rec = installed.get(skill.name)
         rows.append(
             {
                 "name": skill.name,
                 "source": skill.source,
-                "commit": locked.commit if locked else None,
-                "url": locked.url if locked else None,
+                "kind": rec.kind if rec else None,
+                "commit": rec.commit if rec else None,
+                "url": rec.source if rec else None,
             }
         )
 
@@ -53,10 +55,17 @@ def run(*, project_root: Path, manifest_path: Path, json_output: bool) -> None:
 
     name_w = max(8, *(len(r["name"]) for r in rows if r["name"]))
     src_w = max(8, *(len(r["source"] or "") for r in rows))
-    lines = [f"{'NAME':<{name_w}}  {'SOURCE':<{src_w}}  COMMIT"]
+    lines = [f"{'NAME':<{name_w}}  {'SOURCE':<{src_w}}  INSTALLED"]
     for r in rows:
-        commit = (r["commit"] or "")[:12] if r["commit"] else "(local/unlocked)"
-        lines.append(f"{r['name']:<{name_w}}  {(r['source'] or '-'):<{src_w}}  {commit}")
+        if r["commit"]:
+            state = r["commit"][:12]
+        elif r["kind"] == "local":
+            state = "(local)"
+        elif r["kind"]:
+            state = f"({r['kind']})"
+        else:
+            state = "(not installed)"
+        lines.append(f"{r['name']:<{name_w}}  {(r['source'] or '-'):<{src_w}}  {state}")
     emit(payload, json_output=False, human="\n".join(lines))
 
 

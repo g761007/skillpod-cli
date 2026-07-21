@@ -30,13 +30,14 @@ skillfile.yml
       fanout.py       Materialise .skillpod/skills/<name>/ as a real directory (not a symlink)
       adapter.py      Fan-out copies/symlinks/hardlinks into .<agent>/skills/<name>/
       pipeline.py     Orchestrates all steps; rolls back on failure
-  → lockfile/         SHA-256 per skill; YAML serialisation + integrity checks
+  → record/           installed.yml — what is materialised here (never committed)
 ```
 
 **Key design decisions:**
 - `~/.cache/skillpod/` is an **immutable git cache** (atomic rename prevents partial clones).
 - `.skillpod/skills/` is always a **real directory** (`shutil.copytree`), never a symlink — survives cache clears.
-- `SourceSpec.ref = None` means auto-detect via `git ls-remote --symref HEAD`; the resolved ref is written into the lockfile.
+- `SourceSpec.ref = None` means auto-detect via `git ls-remote --symref HEAD`; the resolved ref is written into the install record.
+- `skillfile.yml` **recommends**, it does not compel. Resolution follows the manifest; the record never pins. `install` leaves already-satisfied skills alone, `update` is the explicit refresh.
 - Adapter fan-out strategy (symlink / copy / hardlink) is governed by `install.mode` in `skillfile.yml`.
 - `sources.discovery` honours a `root_name` parameter so a single-skill repo (`SKILL.md` at root) gets a meaningful name without coupling it to the cache directory basename.
 
@@ -48,7 +49,8 @@ skillfile.yml
 | `manifest/` | `skillfile.yml` Pydantic models; sources, skills, groups, agents, registry policy |
 | `sources/` | git clone/fetch, local directory scan, registry HTTP (skills.sh), priority resolver |
 | `installer/` | pipeline, adapter protocol, fanout materialisation |
-| `lockfile/` | lock model, SHA-256 integrity, YAML read/write |
+| `record/` | install-record model, YAML read/write, legacy lockfile migration |
+| `integrity.py` | deterministic content digests for materialised directories |
 | `registry/` | skills.sh search client; trust-policy filtering |
 
 ## Testing conventions
