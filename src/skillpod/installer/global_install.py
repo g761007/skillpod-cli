@@ -25,6 +25,11 @@ from pathlib import Path
 from skillpod.installer.adapter import InstallMode
 from skillpod.installer.adapter_default import IdentityAdapter
 from skillpod.installer.errors import InstallConflict, InstallSystemError
+from skillpod.installer.global_record import (
+    build_record_entry,
+    drop_global_record,
+    record_global_installs,
+)
 from skillpod.installer.paths import (
     global_agent_skill_dir,
     global_install_root,
@@ -32,6 +37,7 @@ from skillpod.installer.paths import (
     is_managed_global_fanout,
 )
 from skillpod.integrity import hash_directory
+from skillpod.record.models import SkillRecord
 from skillpod.sources.discovery import DiscoveredSkill
 from skillpod.sources.git import populate_cache, resolve_default_branch, resolve_ref
 from skillpod.sources.spec import SourceSpec
@@ -108,6 +114,7 @@ def install_global(
 
     adapter = IdentityAdapter()
     report = GlobalInstallReport(spec=spec, install_root=install_root)
+    record_entries: dict[str, SkillRecord] = {}
 
     for skill in selected:
         skill_source_dir = source_root if skill.rel_path == "." else source_root / skill.rel_path
@@ -144,7 +151,20 @@ def install_global(
             materialise_agent_link(link_path, install_link, adapter, mode, force=force)
             installed.fanned_out_to.append(agent)
 
+        record_entries[skill.name] = build_record_entry(
+            kind="git" if spec.kind == "git" else "local",
+            source=spec.url_or_path,
+            ref=spec.ref,
+            commit=commit or None,
+            subpath=spec.subpath,
+            sha256=hash_directory(install_link),
+        )
         report.installed.append(installed)
+
+    # Written once, after every skill in this batch has materialised, so a
+    # failure part-way through cannot leave the record claiming skills that
+    # are not there.
+    record_global_installs(record_entries, home)
 
     return report
 
@@ -265,10 +285,14 @@ def uninstall_global(
 ) -> list[Path]:
     """Remove `~/.skillpod/skills/<name>` and matching fan-out entries.
 
+    The record entry goes too: the skill is no longer materialised, and a
+    record that claims otherwise is worse than no record at all.
+
     Returns the list of paths that were actually removed.
     """
     target_agents = list(agents) if agents is not None else list(DEFAULT_GLOBAL_AGENTS)
     removed: list[Path] = []
+    drop_global_record(skill_name, home)
 
     install_link = global_skill_dir(skill_name, home)
     if install_link.is_symlink() or install_link.exists():
