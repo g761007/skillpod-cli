@@ -67,7 +67,7 @@
     },
     "InstallPolicy": {
       "additionalProperties": false,
-      "description": "`install:` block.\n\n``mode`` governs how fan-out entries are materialised:\n- ``symlink`` (default): create a symbolic link for each agent.\n- ``copy``: create an independent recursive directory copy.\n- ``hardlink``: create a tree of hardlinked files (same inode as source).\n\n``fallback`` lists modes to try when the primary mode fails (e.g. symlink\ndenied by OS).  The default ``[\"copy\"]`` ensures graceful degradation on\nhosts that cannot create symlinks.",
+      "description": "`install:` block.\n\n``mode`` governs how fan-out entries are materialised:\n- ``symlink`` (default): create a symbolic link for each agent.\n- ``copy``: create an independent recursive directory copy.\n- ``hardlink``: create a tree of hardlinked files (same inode as source).\n\n``fallback`` lists modes to try when the primary mode fails (e.g. symlink\ndenied by OS).  The default ``[\"copy\"]`` ensures graceful degradation on\nhosts that cannot create symlinks.\n\n``prefer_global`` treats a skill the user already has in\n``~/.skillpod/skills/`` as **already satisfying** the recommendation: it is\nnot downloaded, not materialised, and not fanned out. Default ``True``,\nbecause `skillfile.yml` recommends rather than compels \u2014 if you already\nhave the skill, the recommendation is met.\n\nSet it to ``False`` to force a project-local copy. Note that for agents\nwhere the personal skill directory outranks the project one (Claude Code\ndocuments exactly that), a global skill of the same name will still be the\none in effect; `skillpod install` warns when that applies.",
       "properties": {
         "fallback": {
           "items": {
@@ -99,6 +99,11 @@
           ],
           "title": "On Missing",
           "type": "string"
+        },
+        "prefer_global": {
+          "default": true,
+          "title": "Prefer Global",
+          "type": "boolean"
         }
       },
       "title": "InstallPolicy",

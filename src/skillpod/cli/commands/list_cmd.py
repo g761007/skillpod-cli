@@ -6,7 +6,7 @@ from pathlib import Path
 
 from skillpod.cli._output import emit, fail
 from skillpod.installer.expand import flatten
-from skillpod.installer.paths import project_record_path
+from skillpod.installer.paths import global_skill_dir, project_record_path
 from skillpod.installer.user_skills import discover_user_skills
 from skillpod.manifest import load as load_manifest
 from skillpod.manifest.models import SkillEntry
@@ -26,13 +26,25 @@ def run(*, project_root: Path, manifest_path: Path, json_output: bool) -> None:
         if name not in known:
             skills.append(SkillEntry(name=name))
 
+    user_skill_names = set(discover_user_skills(project_root))
     rows: list[dict[str, str | None]] = []
     for skill in skills:
         rec = installed.get(skill.name)
+        if skill.name in user_skill_names:
+            layer = "user"
+        elif rec is not None:
+            layer = "project"
+        elif global_skill_dir(skill.name).is_dir():
+            # Not in this project's record but present globally: with
+            # `prefer_global` on, that is why it was never installed here.
+            layer = "global"
+        else:
+            layer = "missing"
         rows.append(
             {
                 "name": skill.name,
                 "source": skill.source,
+                "layer": layer,
                 "kind": rec.kind if rec else None,
                 "commit": rec.commit if rec else None,
                 "url": rec.source if rec else None,
@@ -55,17 +67,22 @@ def run(*, project_root: Path, manifest_path: Path, json_output: bool) -> None:
 
     name_w = max(8, *(len(r["name"]) for r in rows if r["name"]))
     src_w = max(8, *(len(r["source"] or "") for r in rows))
-    lines = [f"{'NAME':<{name_w}}  {'SOURCE':<{src_w}}  INSTALLED"]
+    lines = [f"{'NAME':<{name_w}}  {'SOURCE':<{src_w}}  {'LAYER':<8}  INSTALLED"]
     for r in rows:
         if r["commit"]:
             state = r["commit"][:12]
+        elif r["layer"] == "global":
+            state = "(from ~/.skillpod)"
         elif r["kind"] == "local":
             state = "(local)"
         elif r["kind"]:
             state = f"({r['kind']})"
         else:
             state = "(not installed)"
-        lines.append(f"{r['name']:<{name_w}}  {(r['source'] or '-'):<{src_w}}  {state}")
+        lines.append(
+            f"{r['name']:<{name_w}}  {(r['source'] or '-'):<{src_w}}  "
+            f"{r['layer']:<8}  {state}"
+        )
     emit(payload, json_output=False, human="\n".join(lines))
 
 

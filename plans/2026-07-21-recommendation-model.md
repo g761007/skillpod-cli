@@ -41,6 +41,9 @@ The closest correct analogy is VS Code's `.vscode/extensions.json`
   shadows its global one (rather than merging), that agent is treated as having
   **no global layer**: skills install project-locally as normal. Encoded as a
   per-agent capability table, populated empirically — never assumed.
+- **Claude Code merges the layers, and `personal` wins a name collision.**
+  Measured, then confirmed against the docs — see the section below. The second
+  half is counterintuitive and it constrains `prefer_global: false`.
 - **Global/project overlap is not an error.** `global-local-conflict` today is
   `severity="error"` with `exit 1` (`global_doctor.py:69-78`). It becomes an
   informational "satisfied by global" note in `skillpod doctor`.
@@ -77,6 +80,38 @@ above are legacy installs from ≤0.5.x plus `global archive` moves.
 documents itself as recovering sources, but for anything installed by the
 current version it emits a name-only profile that is not portable to another
 machine. Phase 1 fixes the cause; Phase 2 depends on it.
+
+## Measured: how Claude Code layers skills
+
+The plan's blocking open question, resolved 2026-07-21 by measurement plus the
+official docs — not by assumption.
+
+**Both layers are live at once.** Verified directly: in a session in this repo,
+`.claude/skills/` holds the `openspec-*` skills and `~/.claude/skills/` holds 37
+others, and both sets are invocable. So "already installed globally satisfies
+the recommendation" is sound, and `prefer_global: true` works as designed.
+
+**On a name collision, personal beats project.** From
+[the Skills docs](https://code.claude.com/docs/en/skills):
+
+> When skills share the same name across levels, enterprise overrides personal,
+> and personal overrides project.
+
+This is the reverse of the usual convention, and it constrains the design:
+
+- `prefer_global: true` (the default) is unaffected — no collision is created,
+  because the project never materialises a skill the global layer already has.
+- **`prefer_global: false` cannot deliver what its name promises** when the same
+  name exists globally. The project copy is materialised but Claude Code keeps
+  using the personal one. Phase 3 must therefore *warn* when it materialises a
+  project copy that a global skill of the same name will shadow, and say what to
+  do about it (remove it globally, or rename).
+
+Plugin skills are namespaced `plugin:skill` and cannot collide. There is also an
+enterprise/managed layer above personal.
+
+Only Claude Code has been measured. The other five agents keep the conservative
+default: unverified means no deduplication, install project-locally.
 
 ## Phases
 
@@ -287,5 +322,8 @@ forces them.
 
 ## Open questions
 
-- **Per-agent shadowing table** must be measured before Phase 3 ships. Blocking
-  for that phase only; Phases 1-2 are independent of it.
+- ~~Per-agent shadowing table must be measured before Phase 3 ships.~~
+  **Resolved** — see *Measured: how Claude Code layers skills*. Claude Code
+  merges both layers, so Phase 3's premise holds; personal wins a name
+  collision, so `prefer_global: false` needs a warning. The other five agents
+  stay conservative until someone measures them.

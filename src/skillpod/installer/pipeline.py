@@ -43,8 +43,10 @@ from skillpod.installer.fanout import (
     materialise_install_root,
     rollback_on_failure,
 )
+from skillpod.installer.layering import merges_layers, personal_outranks_project
 from skillpod.installer.paths import (
     agent_skill_dir,
+    global_skill_dir,
     project_record_path,
     project_skill_dir,
 )
@@ -78,6 +80,8 @@ class InstallReport:
     record_path: Path
     installed: list[InstalledSkill] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)
+    satisfied_by_global: list[str] = field(default_factory=list)
+    shadowed_by_global: dict[str, list[str]] = field(default_factory=dict)
     fanned_out_to: list[str] = field(default_factory=list)
 
 
@@ -107,6 +111,42 @@ def _record_entry(entry: InstalledSkill) -> SkillRecord:
         commit=resolved.commit,
         sha256=entry.sha256,
     )
+
+
+def _satisfied_by_global(
+    skill_name: str,
+    agents: list[AgentEntry],
+    *,
+    prefer_global: bool,
+    home: Path | None = None,
+) -> bool:
+    """True when the user's global install already covers this recommendation.
+
+    Requires *every* declared agent to merge its personal and project skill
+    directories. One agent that does not would simply never see the skill, and
+    a silently missing skill is a far worse outcome than a redundant copy — so
+    an unmeasured agent blocks the optimisation rather than gambling on it.
+    """
+    if not prefer_global or not agents:
+        return False
+    if not all(merges_layers(agent.name) for agent in agents):
+        return False
+    return global_skill_dir(skill_name, home).is_dir()
+
+
+def _shadowed_by_global(
+    skill_name: str, agents: list[AgentEntry], *, home: Path | None = None
+) -> list[str]:
+    """Agents whose personal copy will outrank the project copy we just made.
+
+    Only reachable with ``prefer_global: false``. Claude Code documents
+    "personal overrides project", so the project copy is materialised and then
+    ignored — worth saying out loud rather than leaving the user to wonder why
+    their pinned version has no effect.
+    """
+    if not global_skill_dir(skill_name, home).is_dir():
+        return []
+    return [a.name for a in agents if personal_outranks_project(a.name)]
 
 
 def _already_satisfied(
@@ -159,6 +199,7 @@ def install(
     record_path: Path | None = None,
     agent_filter: list[str] | None = None,
     refresh: bool | list[str] = False,
+    home: Path | None = None,
 ) -> InstallReport:
     """Run the full install pipeline against `project_root`.
 
@@ -228,12 +269,26 @@ def install(
     skills_root = project_root / ".skillpod" / "skills"
     plan: list[ResolvedSkill] = []
     skipped: list[str] = []
+    satisfied_by_global: list[str] = []
+    shadowed_by_global: dict[str, list[str]] = {}
 
     for skill in effective_skills:
         user_skill_path = user_skills.get(skill.name)
         if user_skill_path is not None:
             plan.append(resolve_user_skill(skill.name, user_skill_path))
             continue
+
+        # Checked before anything else: a recommendation the user already
+        # satisfies globally needs no resolution, no download, and no copy.
+        if _satisfied_by_global(
+            skill.name, manifest.agents, prefer_global=manifest.install.prefer_global, home=home
+        ):
+            satisfied_by_global.append(skill.name)
+            continue
+
+        eclipsed = _shadowed_by_global(skill.name, manifest.agents, home=home)
+        if eclipsed:
+            shadowed_by_global[skill.name] = eclipsed
 
         wants_refresh = refresh is True or (
             isinstance(refresh, list) and skill.name in refresh
@@ -272,6 +327,8 @@ def install(
         manifest_path=manifest_path,
         record_path=record_path,
         skipped=skipped,
+        satisfied_by_global=satisfied_by_global,
+        shadowed_by_global=shadowed_by_global,
         fanned_out_to=[a.name for a in active_agents],
     )
 
