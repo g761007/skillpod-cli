@@ -9,8 +9,16 @@
   <a href="https://github.com/g761007/skillpod-cli/actions/workflows/ci.yml"><img src="https://github.com/g761007/skillpod-cli/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
   <a href="https://pypi.org/project/skillpod/"><img src="https://img.shields.io/pypi/v/skillpod.svg" alt="PyPI"></a>
   <a href="https://pypi.org/project/skillpod/"><img src="https://img.shields.io/pypi/pyversions/skillpod.svg" alt="Python"></a>
-  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+  <a href="https://github.com/g761007/skillpod-cli/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
 </p>
+
+<p align="center">
+  <a href="#english">English</a> · <a href="#繁體中文">繁體中文</a>
+</p>
+
+---
+
+## English
 
 **Manage the skills your AI coding agents use — per project, or globally.**
 
@@ -20,9 +28,7 @@ Code, Codex, Gemini, Cursor, OpenCode, Antigravity.
 
 > **Pre-1.0:** the manifest and profile schema may still change in breaking ways.
 
----
-
-## Install
+### Install
 
 ```bash
 uv tool install skillpod     # or: pipx install skillpod
@@ -31,9 +37,7 @@ skillpod --version
 
 Needs Python 3.11+ and `git` on your `PATH`.
 
----
-
-## 60-second start
+### 60-second start
 
 ```bash
 cd my-project
@@ -50,347 +54,50 @@ recommends: 1 skill(s)
 `pdf` is now materialised in `.skillpod/skills/` and linked into `.claude/skills/`,
 so your agent can use it. Commit `skillfile.yml`; `.skillpod/` stays out of git.
 
-Not sure what a repo offers? List before you commit to anything:
+Not sure what a repo offers? `skillpod add anthropics/skills --list` shows you
+before you commit to anything.
 
-```bash
-skillpod add anthropics/skills --list
-```
+### The idea
 
----
+**`skillfile.yml` recommends, it does not compel.** Commit it and a teammate
+reproduces your setup with one command — but nothing is pinned, and ignoring it
+is a legitimate choice.
 
-## I want to…
+**A skill you already have globally counts as satisfied.** No redundant project
+copy is made, as long as every agent you declare is known to read its personal
+*and* project skill directories together — Claude Code, Codex, and Gemini CLI
+today.
 
-### …recommend a set of skills for this project
+**`install` never surprises you.** It brings in what is missing and leaves the
+rest alone, so re-running it is offline and instant. Pulling newer upstream
+content is always an explicit `skillpod update`.
 
-`skillfile.yml` is the recommendation. Commit it, and a teammate who wants the
-same setup runs one command.
-
-```yaml
-version: 1
-agents: [claude]
-
-sources:
-  - name: skills
-    type: git
-    url: https://github.com/anthropics/skills
-    ref: main
-    subpath: skills
-
-skills:
-  - name: pdf
-    source: skills
-  - name: docx
-    source: skills
-```
-
-```bash
-skillpod install
-```
-
-Nothing here is enforced. A teammate who ignores it, or already has these
-skills globally, is not doing anything wrong — see the next entry.
-
-### …not install a skill I already have globally
-
-This is the default. If a skill is already in `~/.skillpod/skills/`, the
-recommendation is already met, so no project copy is made:
-
-```console
-$ skillpod install
-Already present: 2 skill(s)
-Satisfied by your global install: xlsx
-```
-
-It applies only where **every** agent you declare is known to read its personal
-*and* project skill directories together. Verified today: **Claude Code,
-Codex, and Gemini CLI**. Declare any other agent and that project gets a real
-copy instead — an unverified agent is assumed *not* to merge, because a
-silently missing skill is far worse than a redundant copy.
-
-To force a project-local copy anyway:
-
-```yaml
-install:
-  prefer_global: false
-```
-
-The three verified agents each resolve a name collision differently, so
-`skillpod install` warns only where the project copy really is ignored:
-
-| Agent | Same skill name in both places |
-|---|---|
-| Claude Code | the **personal** copy wins ([docs](https://code.claude.com/docs/en/skills)) — so `prefer_global: false` warns you the project copy is not the one in use |
-| Gemini CLI | the **project** copy wins |
-| Codex | neither — both appear in the skill selector |
-
-### …see what I actually have right now
-
-```console
-$ skillpod status
-project:    my-project
-manifest:   /path/to/skillfile.yml
-
-recommends: 4 skill(s)
-  satisfied: 2   (1 global, 1 project)
-  missing:   1   → skillpod install
-  broken:    1   → skillpod doctor
-```
-
-Every count names the command that fixes it. For the per-skill breakdown:
-
-```console
-$ skillpod list
-NAME      SOURCE    LAYER     INSTALLED
-pdf       skills    project   fa0fa64bdc96
-docx      skills    project   fa0fa64bdc96
-```
-
-`LAYER` says which copy is actually serving each skill: `project`, `global`,
-`user`, `missing`, or `broken`.
-
-### …install a skill for every project, not just this one
-
-```bash
-skillpod add anthropics/skills --skill xlsx -g -y
-```
-
-This puts the skill in `~/.skillpod/skills/` **without** wiring it into any
-agent — that is a deliberate second step, so a global install never silently
-changes what your agents see:
-
-```bash
-skillpod global link xlsx --agent claude    # or omit --agent for all of them
-skillpod global list
-```
-
-```
-NAME  LINKED     SIZE  MTIME
-xlsx  cl      1102893  2026-07-21
-```
-
-### …turn a skill off without deleting it
-
-```bash
-skillpod unlink audit             # this project
-skillpod unlink xlsx -g           # globally
-```
-
-The materialised copy stays put, so `skillpod link audit` brings it back with
-no download. Only skillpod-created links are removed — anything you placed by
-hand is reported and left alone.
-
-This is deliberately not `remove`: that deletes the content and edits
-`skillfile.yml`, which is much more than "stop showing me this".
-
-### …use a skill I already have, in a project that doesn't declare it
-
-```console
-$ skillpod link xlsx
-Copied 'xlsx' from ~/.skillpod/skills/ — nothing downloaded.
-Linked to: claude
-```
-
-`link` never fetches. If the skill is already on your machine — in this project
-or globally — it wires it up; if it is nowhere, it tells you to run
-`skillpod add`.
-
-### …update my global skills
-
-```console
-$ skillpod global update --dry-run
-Would update 18 skill(s):
-  algorithmic-art              5128e1865d67 → fa0fa64bdc96
-  brand-guidelines             5128e1865d67 → fa0fa64bdc96
-  …
-  local        33 skill(s) — no upstream to pull from
-  no source    37 skill(s) — origin unknown, reinstall from a source to make them updatable
-```
-
-Drop `--dry-run` to apply, or name specific skills:
-
-```bash
-skillpod global update pdf docx
-```
-
-Skills with no recoverable origin, skills from local directories, and remotes
-that cannot be reached are reported and skipped — never fatal. One dead remote
-does not stop the rest.
-
-### …run only some of this project's skills right now
-
-```console
-$ skillpod switch minimal
-active profile set to 'minimal' (scope: project)
-  hidden: polish (still installed — switching back is instant)
-```
-
-Declare the subsets in `skillfile.yml`:
-
-```yaml
-profiles:
-  minimal:
-    skills: [audit]
-```
-
-Hidden skills stay in `.skillpod/skills/`, so switching back is offline and
-immediate. `install` and `sync` respect the active profile too — neither will
-put a hidden skill back.
-
-### …switch my whole global setup at once
-
-Save what you have now, then move between named sets:
-
-```bash
-skillpod profile save writing            # snapshot the current global skills
-skillpod switch reviewing --scope global # download what's missing, unlink the rest
-skillpod switch --back                   # undo
-```
-
-Add `--dry-run` to preview the reconcile first, or `dev+reviewer` to union two
-profiles.
-
-### …use a skill that only exists on my machine
-
-Drop it in `.skillpod/user_skills/<name>/` and run `skillpod install`. It needs
-no source and no manifest entry, and it takes precedence over a declared skill
-of the same name.
-
----
-
-## Commands
+### Everyday commands
 
 | Command | What it does |
 | --- | --- |
-| `skillpod init` | Write a starter `skillfile.yml` and gitignore `.skillpod/` |
 | `skillpod add <source>` | Fetch a skill from a repo or directory and install it |
 | `skillpod install` | Install what the manifest recommends and is not already present |
-| `skillpod update [skill]` | Re-resolve and pull newer upstream content |
-| `skillpod remove <skill>` | Drop a skill from the manifest and uninstall it |
-| `skillpod link <skill>` | Make a skill visible to your agents (`-g` for global) |
-| `skillpod unlink <skill>` | Hide it again, keeping the copy (`-g` for global) |
 | `skillpod status` | The one-screen answer to "is this project ready" |
-| `skillpod list` | Per-skill breakdown: source, layer, installed commit |
+| `skillpod link` / `unlink` | Show or hide a skill without deleting it (`-g` for global) |
+| `skillpod switch <profile>` | Run only part of this project's skill set |
 | `skillpod doctor` | Report faults with paths and codes |
-| `skillpod sync` | Rebuild fan-out from the install record, offline |
-| `skillpod outdated` | Compare installed commits against upstream |
-| `skillpod search <query>` | Search the skills.sh registry |
-| `skillpod global …` | `list`, `link`, `unlink`, `update`, `archive`, `doctor` |
-| `skillpod profile …` | `create`, `list`, `show`, `save`, `diff`, `export`, `import` |
-| `skillpod switch <name>` | Set the active profile for a scope |
-| `skillpod shell <name>` | Sub-shell with a profile pre-activated |
-| `skillpod resolve` | Show the effective skill set, with `--explain` |
-| `skillpod adapter list` | Inspect the active adapter registry |
-| `skillpod schema` | Emit the JSON Schema for editor integration |
 
-`--help` on any subcommand shows the full options. Most commands accept
-`--json` for scripting.
+[Full command reference →](https://github.com/g761007/skillpod-cli/blob/main/docs/commands.md)
 
----
+### Documentation
 
-## `skillfile.yml` reference
+| Page | Covers |
+| --- | --- |
+| [Guide](https://github.com/g761007/skillpod-cli/blob/main/docs/guide.md) | Task recipes — recommend a set, install globally, profiles, machine-local skills |
+| [Commands](https://github.com/g761007/skillpod-cli/blob/main/docs/commands.md) | Every subcommand and what it does |
+| [`skillfile.yml`](https://github.com/g761007/skillpod-cli/blob/main/docs/skillfile.md) | Full manifest reference, with every default |
+| [How it works](https://github.com/g761007/skillpod-cli/blob/main/docs/how-it-works.md) | Resolve → cache → materialise → fan out, and what you're trusting |
+| [Troubleshooting](https://github.com/g761007/skillpod-cli/blob/main/docs/troubleshooting.md) | Common faults and their fixes |
 
-Only `version` is required. Everything below shows its default.
+Every page carries its 繁體中文 translation in the same file.
 
-```yaml
-version: 1
-
-# Agents that receive fan-out. Empty means skills land in .skillpod/skills/
-# only. Supported: claude, codex, gemini, cursor, opencode, antigravity.
-agents: [claude]
-
-install:
-  mode: symlink          # symlink | copy | hardlink
-  fallback: [copy]       # tried when `mode` fails (e.g. symlinks denied)
-  on_missing: error      # error | skip
-  prefer_global: true    # a skill already in ~/.skillpod/skills/ counts as satisfied
-
-sources:
-  - name: skills
-    type: git            # git | local
-    url: https://github.com/anthropics/skills
-    ref: main            # branch, tag, or commit
-    subpath: skills      # git only — where the skills live inside the repo
-    priority: 50         # higher wins when several sources could provide a skill
-
-skills:
-  - audit                          # shorthand: resolve against sources, then the registry
-  - name: pdf
-    source: skills                 # pin to one source, skipping the registry
-    version: <40-char commit sha>  # optional: pin to an exact commit
-
-groups:                  # named bundles, activated by `use:`
-  frontend: [pdf, docx]
-use: [frontend]
-
-registry:
-  default: skills.sh
-  skills_sh:
-    allow_unverified: false
-    min_installs: 0
-    min_stars: 0
-
-profiles:                # named subsets, see `skillpod switch`
-  minimal:
-    skills: [pdf]
-
-activation:
-  mode: manual           # manual | strict | merge | fallback
-  inherit_global: true
-  default_profile: null
-```
-
-Run `skillpod schema --output schemas/skillfile.schema.json` for editor
-autocomplete, or `skillpod schema --profile` for the global profile schema.
-
----
-
-## How it works
-
-```
-skillfile.yml  →  resolve  →  cache  →  .skillpod/skills/  →  .<agent>/skills/
-```
-
-1. **Resolve.** A skill declared with `source:` is looked up there. A bare name
-   probes declared sources by priority, then falls back to the skills.sh
-   registry.
-2. **Cache.** Git sources clone into `~/.cache/skillpod/<host>/<owner>/<repo>@<commit>/`,
-   written by atomic rename so a partial clone is never visible.
-3. **Materialise.** `.skillpod/skills/<name>/` is a real directory copy, never
-   a symlink — clearing the cache cannot break an installed project.
-4. **Fan out.** Each declared agent gets `.<agent>/skills/<name>` pointing at
-   that copy, using `install.mode`.
-
-**What gets recorded.** `.skillpod/installed.yml` (and `~/.skillpod/installed.yml`
-for global installs) records what is on this machine: source, ref, commit,
-content digest. Both live under `.skillpod/`, which is gitignored — they
-*describe* your machine, they do not constrain a teammate's.
-
-**`install` versus `update`.** `install` brings in what is missing and leaves
-alone what is already there, so re-running it is offline and instant. Pulling
-newer upstream content is `skillpod update` — always an explicit act, never a
-side effect.
-
----
-
-## Security model — what you're trusting
-
-Adding a skill pulls external text into your agent's context. A `SKILL.md` is
-read as *instructions*, so review a repo before adding it, the same way you
-would review a package before installing it.
-
-**The registry trust policy gates skills.sh only.** `registry.skills_sh`
-(`allow_unverified`, `min_installs`, `min_stars`) applies when you `search` or
-resolve a bare name through the registry. Passing a git URL, an `owner/repo`
-shorthand, or a local path to `skillpod add` trusts that source directly — no
-threshold is checked.
-
-**Content is digested, not policed.** Each install records a sha256 of what it
-materialised, so `skillpod doctor` can tell you the disk no longer matches the
-record. That detects drift and corruption; it does not vet the content.
-
----
-
-## Roadmap
+### Roadmap
 
 | Milestone | Status | Highlights |
 | --- | --- | --- |
@@ -400,32 +107,9 @@ record. That detects drift and corruption; it does not vet the content.
 | 0.9.1 | shipped | `prefer_global` extended to Codex and Gemini CLI; Windows suite green and gating CI |
 | 1.0.0 | planned | schema freeze |
 
-Full history: [`CHANGELOG.md`](./CHANGELOG.md).
+Full history: [`CHANGELOG.md`](https://github.com/g761007/skillpod-cli/blob/main/CHANGELOG.md).
 
----
-
-## Troubleshooting
-
-**Agent directory is empty after `install`**
-`agents:` defaults to `[]`, which disables fan-out. Declare the agents you use.
-
-**A skill is installed but my agent ignores it**
-If the same name exists in `~/.skillpod/skills/`, Claude Code prefers the
-personal copy. `skillpod status` shows which layer is serving it.
-
-**Symlink creation fails (Windows, some CI)**
-Set `install.mode: copy`, or rely on the default `fallback: [copy]`.
-
-**`skillpod add <owner/repo>` fails with a git error**
-Check `git` is on `$PATH`. For private repos, verify your SSH or HTTPS
-credentials.
-
-**`global archive '*'` expands to filenames**
-Quote the asterisk — the shell expands it otherwise.
-
----
-
-## Contributing
+### Contributing
 
 ```bash
 uv sync
@@ -434,8 +118,114 @@ uv run ruff check src tests
 uv run mypy src/skillpod
 ```
 
-See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for the module map and conventions.
+See [`CONTRIBUTING.md`](https://github.com/g761007/skillpod-cli/blob/main/CONTRIBUTING.md)
+for the module map and conventions.
 
-## License
+### License
 
-MIT — see [`LICENSE`](./LICENSE).
+MIT — see [`LICENSE`](https://github.com/g761007/skillpod-cli/blob/main/LICENSE).
+
+---
+
+## 繁體中文
+
+**管理 AI coding agent 使用的 skill —— 可以只用在單一專案，也可以套用到全域。**
+
+專案負責*建議*要用哪些 skill，實際跑什麼由你決定。skillpod 只安裝一份，
+然後把它接到你用的每一個 agent：Claude Code、Codex、Gemini、Cursor、
+OpenCode、Antigravity。
+
+> **Pre-1.0：** manifest 與 profile schema 仍可能出現破壞性變更。
+
+### 安裝
+
+```bash
+uv tool install skillpod     # 或：pipx install skillpod
+skillpod --version
+```
+
+需要 Python 3.11+，且 `git` 必須在 `PATH` 上。
+
+### 60 秒上手
+
+```bash
+cd my-project
+skillpod init                                   # 產生 skillfile.yml，並把 .skillpod/ 加進 gitignore
+skillpod add anthropics/skills --skill pdf -y   # 取得一個 skill 並接上 agent
+skillpod status                                 # 確認結果
+```
+
+```
+recommends: 1 skill(s)
+  satisfied: 1   (1 project)
+```
+
+`pdf` 現在已經實體化在 `.skillpod/skills/`，並連結到 `.claude/skills/`，
+你的 agent 就能使用它。請把 `skillfile.yml` 提交進版控；`.skillpod/` 則不進 git。
+
+不確定某個 repo 提供哪些 skill？`skillpod add anthropics/skills --list`
+可以讓你先看過再決定。
+
+### 核心概念
+
+**`skillfile.yml` 是建議，不是強制。** 把它提交進版控，同事就能用一道指令重現你的環境 ——
+但它不釘死任何東西，選擇忽略它也是完全正當的。
+
+**全域已經有的 skill 就算已滿足。** 不會再多做一份專案複本，前提是你宣告的每一個 agent
+都確定會同時讀取個人與專案的 skill 目錄 —— 目前是 Claude Code、Codex 與 Gemini CLI。
+
+**`install` 不會給你意外。** 它只補上缺少的，其餘原封不動，所以重複執行是離線且瞬間完成的。
+要拉取較新的上游內容，永遠得明確執行 `skillpod update`。
+
+### 常用指令
+
+| 指令 | 用途 |
+| --- | --- |
+| `skillpod add <source>` | 從 repo 或目錄取得 skill 並安裝 |
+| `skillpod install` | 安裝 manifest 建議、但目前尚未具備的 skill |
+| `skillpod status` | 用一個畫面回答「這個專案準備好了嗎」 |
+| `skillpod link` / `unlink` | 顯示或隱藏某個 skill，但不刪除它（`-g` 為全域） |
+| `skillpod switch <profile>` | 只跑這個專案的一部分 skill |
+| `skillpod doctor` | 回報問題，附上路徑與錯誤碼 |
+
+[完整指令參考 →](https://github.com/g761007/skillpod-cli/blob/main/docs/commands.md#繁體中文)
+
+### 文件
+
+| 頁面 | 內容 |
+| --- | --- |
+| [使用指南](https://github.com/g761007/skillpod-cli/blob/main/docs/guide.md#繁體中文) | 情境操作 —— 建議一組 skill、全域安裝、profile、只存在本機的 skill |
+| [指令](https://github.com/g761007/skillpod-cli/blob/main/docs/commands.md#繁體中文) | 每個子指令與它的用途 |
+| [`skillfile.yml`](https://github.com/g761007/skillpod-cli/blob/main/docs/skillfile.md#繁體中文) | 完整 manifest 參考，含所有預設值 |
+| [運作方式](https://github.com/g761007/skillpod-cli/blob/main/docs/how-it-works.md#繁體中文) | resolve → cache → 實體化 → fan out，以及你正在信任什麼 |
+| [疑難排解](https://github.com/g761007/skillpod-cli/blob/main/docs/troubleshooting.md#繁體中文) | 常見問題與解法 |
+
+每份文件都在同一個檔案裡附上英文原文。
+
+### 藍圖
+
+| 里程碑 | 狀態 | 重點 |
+| --- | --- | --- |
+| 0.1.0 – 0.5.x | 已發布 | manifest、installer、registry、adapter、`global` CLI |
+| 0.6.x | 已發布 | workspace profile、activation 政策、session shell、組合 |
+| 0.9.0 | 已發布 | **建議模型** —— 移除 `skillfile.lock`、`prefer_global`、`global update`、`status` 儀表板、統一的 `link`/`unlink`、會調和 fan-out 的專案 profile |
+| 0.9.1 | 已發布 | `prefer_global` 擴及 Codex 與 Gemini CLI；Windows 測試套件全綠並納入 CI 把關 |
+| 1.0.0 | 規劃中 | schema 凍結 |
+
+完整歷程：[`CHANGELOG.md`](https://github.com/g761007/skillpod-cli/blob/main/CHANGELOG.md)。
+
+### 參與貢獻
+
+```bash
+uv sync
+uv run pytest -q
+uv run ruff check src tests
+uv run mypy src/skillpod
+```
+
+模組地圖與慣例請見
+[`CONTRIBUTING.md`](https://github.com/g761007/skillpod-cli/blob/main/CONTRIBUTING.md)。
+
+### 授權
+
+MIT —— 詳見 [`LICENSE`](https://github.com/g761007/skillpod-cli/blob/main/LICENSE)。

@@ -15,6 +15,7 @@ words:
   - mypy
   - opencode
   - openspec
+  - pipx
   - pyproject
   - pytest
   - ruff
