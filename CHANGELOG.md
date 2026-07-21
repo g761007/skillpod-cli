@@ -21,6 +21,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`skillpod link` / `skillpod unlink`** — one verb pair for both scopes.
+  Project scope by default, `-g` for global; `global link` / `global unlink`
+  remain as aliases. Previously the project side could only be expressed as
+  `add` / `remove`, which also downloads and rewrites `skillfile.yml` — far
+  more than "should this agent see this skill".
+
+  `unlink` keeps the materialised copy, so re-linking needs no download, and
+  it never touches entries skillpod did not create. `link` never fetches: a
+  skill already present globally is copied into the project, and one that is
+  nowhere on the machine produces an error naming `skillpod add`.
 - **`skillpod status` is now the one place to see what you have.** It replaces
   a five-command jigsaw (`status` + `list` + `global list` + `doctor` +
   `global doctor`) for the question "is this project ready":

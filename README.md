@@ -166,12 +166,28 @@ xlsx  cl      1102893  2026-07-21
 ### …turn a skill off without deleting it
 
 ```bash
-skillpod global unlink xlsx --agent claude
+skillpod unlink audit             # this project
+skillpod unlink xlsx -g           # globally
 ```
 
-The cached copy stays in `~/.skillpod/skills/`, so re-linking later needs no
-download. Only skillpod-created links are removed — anything you placed by hand
-is left alone.
+The materialised copy stays put, so `skillpod link audit` brings it back with
+no download. Only skillpod-created links are removed — anything you placed by
+hand is reported and left alone.
+
+This is deliberately not `remove`: that deletes the content and edits
+`skillfile.yml`, which is much more than "stop showing me this".
+
+### …use a skill I already have, in a project that doesn't declare it
+
+```console
+$ skillpod link xlsx
+Copied 'xlsx' from ~/.skillpod/skills/ — nothing downloaded.
+Linked to: claude
+```
+
+`link` never fetches. If the skill is already on your machine — in this project
+or globally — it wires it up; if it is nowhere, it tells you to run
+`skillpod add`.
 
 ### …update my global skills
 
@@ -225,6 +241,8 @@ of the same name.
 | `skillpod install` | Install what the manifest recommends and is not already present |
 | `skillpod update [skill]` | Re-resolve and pull newer upstream content |
 | `skillpod remove <skill>` | Drop a skill from the manifest and uninstall it |
+| `skillpod link <skill>` | Make a skill visible to your agents (`-g` for global) |
+| `skillpod unlink <skill>` | Hide it again, keeping the copy (`-g` for global) |
 | `skillpod status` | The one-screen answer to "is this project ready" |
 | `skillpod list` | Per-skill breakdown: source, layer, installed commit |
 | `skillpod doctor` | Report faults with paths and codes |
