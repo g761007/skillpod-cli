@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import sys
 from dataclasses import replace
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import typer
 import yaml
@@ -297,24 +297,6 @@ def _ensure_source_and_skills(
         if isinstance(entry, dict) and "name" in entry
     }
 
-    # Reuse an existing source entry whose URL/path matches what we'd add.
-    matching = _find_matching_source(sources_list, spec)
-    if matching is not None:
-        source_name = matching
-    else:
-        base_name = source_name_override or spec.derived_name
-        source_name = derive_unique_name(base_name, existing_source_names)
-        new_source: dict[str, object] = {"name": source_name, "type": spec.kind}
-        if spec.kind == "git":
-            new_source["url"] = spec.url_or_path
-            new_source["ref"] = spec.ref
-            if spec.subpath is not None:
-                new_source["subpath"] = spec.subpath
-        else:
-            new_source["path"] = spec.url_or_path
-        new_source["priority"] = 50
-        sources_list.append(new_source)
-
     existing_skill_names: set[str] = set()
     for entry in skills_list:
         if isinstance(entry, str):
@@ -324,12 +306,48 @@ def _ensure_source_and_skills(
 
     added: list[str] = []
     skipped: list[str] = []
-    for skill in selected:
-        if skill.name in existing_skill_names:
-            skipped.append(skill.name)
-            continue
-        skills_list.append({"name": skill.name, "source": source_name})
-        added.append(skill.name)
+    source_name = ""
+
+    # Skills are grouped by where they sit inside the repo, and each group gets
+    # a source carrying that `subpath`. Discovery walks the whole tree, so a
+    # skill at `skills/pdf` is offered by `--list`; recording only the repo URL
+    # would lose its location and resolution would then look for `<repo>/pdf`
+    # and fail. That is what broke `skillpod add anthropics/skills --skill pdf`.
+    for group_subpath, group in _group_by_subpath(spec, selected).items():
+        group_spec = replace(spec, subpath=group_subpath)
+
+        # Reuse an existing source entry whose URL/path/subpath already match.
+        matching = _find_matching_source(sources_list, group_spec)
+        if matching is not None:
+            source_name = matching
+        else:
+            base_name = source_name_override or spec.derived_name
+            source_name = derive_unique_name(base_name, existing_source_names)
+            existing_source_names.add(source_name)
+            new_source: dict[str, object] = {"name": source_name, "type": spec.kind}
+            if spec.kind == "git":
+                new_source["url"] = spec.url_or_path
+                new_source["ref"] = spec.ref
+                if group_subpath is not None:
+                    new_source["subpath"] = group_subpath
+            else:
+                # A local source has no `subpath` field — the schema forbids
+                # it — so the nesting is folded into the path instead.
+                new_source["path"] = (
+                    f"{spec.url_or_path}/{group_subpath}"
+                    if group_subpath
+                    else spec.url_or_path
+                )
+            new_source["priority"] = 50
+            sources_list.append(new_source)
+
+        for skill in group:
+            if skill.name in existing_skill_names:
+                skipped.append(skill.name)
+                continue
+            skills_list.append({"name": skill.name, "source": source_name})
+            existing_skill_names.add(skill.name)
+            added.append(skill.name)
 
     raw["sources"] = sources_list
     raw["skills"] = skills_list
@@ -338,6 +356,30 @@ def _ensure_source_and_skills(
         encoding="utf-8",
     )
     return source_name, added, skipped
+
+
+def _group_by_subpath(
+    spec: SourceSpec, selected: list[DiscoveredSkill]
+) -> dict[str | None, list[DiscoveredSkill]]:
+    """Group skills by the directory they occupy inside the source.
+
+    The subpath is relative to what the spec already points at, so an explicit
+    `--source .../tree/main/skills` composes with a skill nested further down.
+    A skill whose `rel_path` is `.` (the repo root *is* the skill) contributes
+    no subpath.
+    """
+    groups: dict[str | None, list[DiscoveredSkill]] = {}
+    for skill in selected:
+        parent = PurePosixPath(skill.rel_path).parent
+        rel = "" if str(parent) in (".", "") else str(parent)
+        if spec.subpath and rel:
+            combined: str | None = f"{spec.subpath}/{rel}"
+        elif spec.subpath:
+            combined = spec.subpath
+        else:
+            combined = rel or None
+        groups.setdefault(combined, []).append(skill)
+    return groups
 
 
 def _find_matching_source(sources_list: list[object], spec: SourceSpec) -> str | None:
@@ -349,8 +391,12 @@ def _find_matching_source(sources_list: list[object], spec: SourceSpec) -> str |
             continue
         if spec.kind == "git" and entry.get("url") == spec.url_or_path and entry.get("subpath") == spec.subpath:
             return entry.get("name") if isinstance(entry.get("name"), str) else None
-        if spec.kind == "local" and entry.get("path") == spec.url_or_path:
-            return entry.get("name") if isinstance(entry.get("name"), str) else None
+        if spec.kind == "local":
+            expected = (
+                f"{spec.url_or_path}/{spec.subpath}" if spec.subpath else spec.url_or_path
+            )
+            if entry.get("path") == expected:
+                return entry.get("name") if isinstance(entry.get("name"), str) else None
     return None
 
 
