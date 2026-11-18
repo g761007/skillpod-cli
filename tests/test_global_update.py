@@ -24,7 +24,7 @@ from skillpod.sources.discovery import discover_skills
 from skillpod.sources.git import populate_cache, resolve_ref
 from skillpod.sources.spec import parse_source_spec
 from tests._env import set_home
-from tests._git_fixtures import _git, make_root_skill_repo
+from tests._git_fixtures import _git, make_multi_skill_repo, make_root_skill_repo
 
 _COMMIT = "a" * 40
 
@@ -98,6 +98,61 @@ def test_update_pulls_a_moved_upstream(isolated_env: Path, tmp_path: Path) -> No
     body = (global_skill_dir("audit", isolated_env) / "SKILL.md").read_text(encoding="utf-8")
     assert "revised guidance" in body
     assert read_global_record(isolated_env).installed["audit"].commit == second
+
+
+def test_update_finds_a_skill_whose_subpath_is_the_skill_itself(
+    isolated_env: Path, tmp_path: Path
+) -> None:
+    """A `subpath` that points straight at one skill directory is refreshed.
+
+    Regression (0.9.1): every `anthropics/skills` entry recovered from a legacy
+    cache symlink is recorded as repo `skills` + `subpath: skills/<name>`.
+    Discovery then sees the subpath root *as* the skill and named it after the
+    repo, so it came back as `skills` and never matched — every such update
+    failed with "no longer present (available: skills)" while `--dry-run`
+    promised it would succeed. The repo name has to differ from the skill name
+    here, or the bug cannot show.
+    """
+    repo, first = make_multi_skill_repo(
+        tmp_path / "src", repo_name="skills", skills=["algorithmic-art", "pdf"]
+    )
+    # The shape `reconcile_global_record` gives a recovered cache symlink.
+    global_skill_dir("algorithmic-art", isolated_env).mkdir(parents=True)
+    write_global_record(
+        InstallRecord(
+            installed={
+                "algorithmic-art": SkillRecord(
+                    kind="git",
+                    source=repo.as_uri(),
+                    commit=first,
+                    subpath="skills/algorithmic-art",
+                )
+            }
+        ),
+        isolated_env,
+    )
+    (repo / "skills" / "algorithmic-art" / "SKILL.md").write_text(
+        "---\ndescription: algorithmic-art\n---\nrevised guidance\n", encoding="utf-8"
+    )
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-q", "-m", "move upstream")
+    second = _git(repo, "rev-parse", "HEAD").strip()
+    assert second != first
+
+    plan, _missing = plan_update(home=isolated_env)
+    assert [u.name for u in plan.to_update] == ["algorithmic-art"]
+
+    report = execute_update(plan, home=isolated_env)
+
+    assert report.failed == []
+    assert [u.name for u in report.updated] == ["algorithmic-art"]
+    skill_md = global_skill_dir("algorithmic-art", isolated_env) / "SKILL.md"
+    assert "revised guidance" in skill_md.read_text(encoding="utf-8")
+    entry = read_global_record(isolated_env).installed["algorithmic-art"]
+    assert entry.commit == second
+    assert entry.subpath == "skills/algorithmic-art"
+    # The sibling the subpath excludes is not dragged in.
+    assert not global_skill_dir("pdf", isolated_env).exists()
 
 
 def test_unmoved_upstream_is_reported_as_current(isolated_env: Path, tmp_path: Path) -> None:

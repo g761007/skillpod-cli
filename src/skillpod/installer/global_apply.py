@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import warnings
 from dataclasses import dataclass, field, replace
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from skillpod.installer.adapter import InstallMode
 from skillpod.installer.adapter_default import IdentityAdapter
@@ -153,7 +153,12 @@ def _download_skill(skill: GlobalProfileSkill, agents: list[str], *, force: bool
             "git URL, owner/repo, or local path"
         )
     if skill.subpath:
-        spec = replace(spec, subpath=skill.subpath)
+        # When the subpath is itself a skill, discovery names it `derived_name`,
+        # which must be that directory and not the repo — the rule
+        # `parse_source_spec` already follows for `/tree/<ref>/<subpath>` URLs.
+        spec = replace(
+            spec, subpath=skill.subpath, derived_name=PurePosixPath(skill.subpath).name
+        )
 
     # Fetch + discover so we can select the named skill out of the source.
     spec, root, _commit = fetch_source(spec)

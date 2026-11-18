@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from skillpod.installer.global_apply import fetch_source
 from skillpod.installer.global_backfill import reconcile_global_record
@@ -169,7 +169,12 @@ def _refresh(item: SkillUpdate, *, home: Path | None) -> None:
             "owner/repo, or local path"
         )
     if item.subpath:
-        spec = replace(spec, subpath=item.subpath)
+        # When the subpath is itself a skill, discovery names it `derived_name`,
+        # which must be that directory and not the repo — the rule
+        # `parse_source_spec` already follows for `/tree/<ref>/<subpath>` URLs.
+        spec = replace(
+            spec, subpath=item.subpath, derived_name=PurePosixPath(item.subpath).name
+        )
     spec, root, _commit = fetch_source(spec)
     discovered = discover_skills(root, root_name=spec.derived_name)
     match = next((d for d in discovered if d.name == item.name), None)
