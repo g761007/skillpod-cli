@@ -17,7 +17,7 @@ from skillpod.installer.paths import (
 )
 from skillpod.profile.io import load_global_profile_body
 from skillpod.profile.models import GlobalProfileBody, GlobalProfileFile
-from tests._git_fixtures import make_root_skill_repo
+from tests._git_fixtures import make_multi_skill_repo, make_root_skill_repo
 
 
 def _write_global_profile(home: Path, name: str, body: dict) -> None:
@@ -132,6 +132,41 @@ def test_apply_downloads_and_fans_out(tmp_path: Path) -> None:
         link = global_agent_skill_dir(agent, "audit", home)
         assert is_managed_global_fanout(link, "audit", home)
     assert not global_agent_skill_dir("gemini", "audit", home).exists()
+
+
+def test_apply_downloads_a_skill_whose_subpath_is_the_skill_itself(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A profile entry whose `subpath` is one skill directory is downloadable.
+
+    Regression (0.9.1): `profile save` writes `anthropics/skills` entries as
+    repo `skills` + `subpath: skills/<name>`, and discovery named the subpath
+    root after the repo, so switching to such a profile on a fresh machine
+    failed with "not found (available: skills)". The repo name has to differ
+    from the skill name, or the bug cannot show.
+    """
+    monkeypatch.setenv("SKILLPOD_CACHE_DIR", str(tmp_path / "cache"))
+    repo, _sha = make_multi_skill_repo(
+        tmp_path / "src", repo_name="skills", skills=["algorithmic-art", "pdf"]
+    )
+    home = tmp_path / "home"
+    body = GlobalProfileBody.model_validate(
+        {
+            "skills": [
+                {
+                    "name": "algorithmic-art",
+                    "source": repo.as_uri(),
+                    "subpath": "skills/algorithmic-art",
+                }
+            ]
+        }
+    )
+    plan = plan_apply(body, agents=["claude"], home=home)
+    report = execute_apply(body, plan, force=True, home=home)
+
+    assert report.downloaded == ["algorithmic-art"]
+    assert (global_skill_dir("algorithmic-art", home) / "SKILL.md").is_file()
+    assert not global_skill_dir("pdf", home).exists()
 
 
 def test_switching_profile_unlinks_previous_keeps_cache(tmp_path: Path) -> None:

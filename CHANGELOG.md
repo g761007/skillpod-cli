@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `skillpod global update` and `skillpod switch --scope global` can again
+  handle a skill whose `subpath` points directly at one skill directory, such
+  as every `anthropics/skills` entry recovered from a legacy cache symlink
+  (`source: anthropics/skills`, `subpath: skills/pdf`). Discovery named that
+  directory after the repo (`skills`) instead of the directory itself, so the
+  skill was never found: every update failed with "no longer present
+  (available: skills)" even though `--dry-run` had listed it as updatable, and
+  switching to a profile with such an entry failed with "not found". The
+  subpath's last segment is now used, the same rule a `/tree/<ref>/<subpath>`
+  URL already followed.
+
 ## [0.9.1] - 2026-07-21
 
 ### Added
