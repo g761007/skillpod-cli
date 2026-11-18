@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-11-18
+
 ### Fixed
 
 - `skillpod global update` and `skillpod switch --scope global` can again
@@ -738,6 +740,7 @@ required to publish.
 - pytest suite covering manifest, lockfile, source resolution, installer,
   and CLI smoke tests.
 
+[0.9.2]: https://github.com/g761007/skillpod-cli/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/g761007/skillpod-cli/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/g761007/skillpod-cli/compare/v0.6.5...v0.9.0
 [0.6.5]: https://github.com/g761007/skillpod-cli/compare/v0.6.4...v0.6.5
