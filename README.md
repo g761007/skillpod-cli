@@ -105,6 +105,7 @@ Every page carries its 繁體中文 translation in the same file.
 | 0.6.x | shipped | workspace profiles, activation policy, session shell, composition |
 | 0.9.0 | shipped | **recommendation model** — `skillfile.lock` retired, `prefer_global`, `global update`, `status` dashboard, unified `link`/`unlink`, project profiles that reconcile fan-out |
 | 0.9.1 | shipped | `prefer_global` extended to Codex and Gemini CLI; Windows suite green and gating CI |
+| 0.9.2 | shipped | `global update` / `switch --scope global` fixed for a `subpath` that is itself a skill (e.g. `anthropics/skills`) |
 | 1.0.0 | planned | schema freeze |
 
 Full history: [`CHANGELOG.md`](https://github.com/g761007/skillpod-cli/blob/main/CHANGELOG.md).
@@ -210,6 +211,7 @@ recommends: 1 skill(s)
 | 0.6.x | 已發布 | workspace profile、activation 政策、session shell、組合 |
 | 0.9.0 | 已發布 | **建議模型** —— 移除 `skillfile.lock`、`prefer_global`、`global update`、`status` 儀表板、統一的 `link`/`unlink`、會調和 fan-out 的專案 profile |
 | 0.9.1 | 已發布 | `prefer_global` 擴及 Codex 與 Gemini CLI；Windows 測試套件全綠並納入 CI 把關 |
+| 0.9.2 | 已發布 | 修正 `global update` / `switch --scope global` 遇到 `subpath` 直接指向單一 skill（如 `anthropics/skills`）時失敗 |
 | 1.0.0 | 規劃中 | schema 凍結 |
 
 完整歷程：[`CHANGELOG.md`](https://github.com/g761007/skillpod-cli/blob/main/CHANGELOG.md)。
